@@ -32,7 +32,7 @@ export default async function HomePage() {
         </div>
         <div className="hero-visual">
           <div className="hero-orbit" aria-hidden="true"><span /><span /><span /></div>
-          <Image src="/media/instagram/cordon-esmeralda.jpg" alt="Cordón verde de murano Liira, usado de tres formas" fill priority sizes="(max-width: 800px) 100vw, 54vw" />
+          <Image src="/media/instagram/cordon-esmeralda.jpg" alt="Cordón verde de murano Liira, usado de tres formas" fill priority loading="eager" sizes="(max-width: 800px) 100vw, 54vw" />
           <div className="hero-caption"><span>01</span><p>Una pieza.<br />Muchas formas de llevarla.</p></div>
         </div>
       </section>
