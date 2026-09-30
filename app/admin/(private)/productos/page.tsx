@@ -4,8 +4,10 @@ import { Check, ImagePlus, Pencil, Plus } from "lucide-react";
 import { saveProduct } from "@/app/admin/actions";
 import { formatCop } from "@/lib/config";
 import { getAdminData } from "@/lib/data/catalog";
+import { requireAdmin } from "@/lib/auth/session";
 
 export default async function ProductsAdminPage({ searchParams }: { searchParams: Promise<{ edit?: string; new?: string; saved?: string }> }) {
+  await requireAdmin("business");
   const params = await searchParams;
   const { products, categories, available } = await getAdminData();
   const editing = products.find((product) => product.id === params.edit);

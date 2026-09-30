@@ -6,6 +6,7 @@ import { redirect } from "next/navigation";
 
 const COOKIE_NAME = "liira_admin";
 const SESSION_TTL_SECONDS = 60 * 60 * 12;
+export type AdminRole = "business" | "technical";
 
 function secret() {
   if (process.env.AUTH_SECRET) return process.env.AUTH_SECRET;
@@ -23,9 +24,9 @@ function safeEqual(a: string, b: string) {
   return left.length === right.length && timingSafeEqual(left, right);
 }
 
-export async function createAdminSession() {
+export async function createAdminSession(role: AdminRole) {
   const expires = Math.floor(Date.now() / 1000) + SESSION_TTL_SECONDS;
-  const payload = Buffer.from(JSON.stringify({ role: "admin", expires })).toString("base64url");
+  const payload = Buffer.from(JSON.stringify({ role, expires })).toString("base64url");
   const token = `${payload}.${sign(payload)}`;
   const store = await cookies();
   store.set(COOKIE_NAME, token, {
@@ -42,31 +43,42 @@ export async function clearAdminSession() {
   store.delete(COOKIE_NAME);
 }
 
-export async function hasAdminSession() {
+export async function getAdminSession(): Promise<{ role: AdminRole; expires: number } | null> {
   const store = await cookies();
   const token = store.get(COOKIE_NAME)?.value;
-  if (!token) return false;
+  if (!token) return null;
 
   const [payload, signature] = token.split(".");
-  if (!payload || !signature || !safeEqual(sign(payload), signature)) return false;
+  if (!payload || !signature || !safeEqual(sign(payload), signature)) return null;
 
   try {
     const parsed = JSON.parse(Buffer.from(payload, "base64url").toString()) as {
       role?: string;
       expires?: number;
     };
-    return parsed.role === "admin" && Boolean(parsed.expires && parsed.expires > Date.now() / 1000);
+    const validRole = parsed.role === "business" || parsed.role === "technical";
+    if (!validRole || !parsed.expires || parsed.expires <= Date.now() / 1000) return null;
+    return { role: parsed.role as AdminRole, expires: parsed.expires };
   } catch {
-    return false;
+    return null;
   }
 }
 
-export async function requireAdmin() {
-  if (!(await hasAdminSession())) redirect("/admin/login");
+export async function hasAdminSession() {
+  return Boolean(await getAdminSession());
 }
 
-export function verifyAdminUsername(username: string) {
-  const expectedUsername = process.env.ADMIN_USERNAME;
-  if (!expectedUsername) return false;
-  return safeEqual(username, expectedUsername);
+export async function requireAdmin(role?: AdminRole) {
+  const session = await getAdminSession();
+  if (!session) redirect("/admin/login");
+  if (role && session.role !== role) redirect(session.role === "technical" ? "/admin/tecnico" : "/admin");
+  return session;
+}
+
+export function resolveAdminRole(username: string): AdminRole | null {
+  const businessUsername = process.env.BUSINESS_ADMIN_USERNAME || process.env.ADMIN_USERNAME;
+  const technicalUsername = process.env.TECH_ADMIN_USERNAME;
+  if (businessUsername && safeEqual(username, businessUsername)) return "business";
+  if (technicalUsername && safeEqual(username, technicalUsername)) return "technical";
+  return null;
 }

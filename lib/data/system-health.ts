@@ -49,12 +49,11 @@ export async function getSystemHealth() {
     ],
     security: [
       { label: "Sesiones firmadas", ok: Boolean(process.env.AUTH_SECRET) },
-      { label: "Contraseña con hash", ok: Boolean(process.env.ADMIN_PASSWORD_HASH) },
-      { label: "Acceso privado", ok: Boolean(process.env.ADMIN_USERNAME) },
+      { label: "Credenciales comerciales cifradas", ok: Boolean(process.env.BUSINESS_ADMIN_USERNAME && process.env.BUSINESS_ADMIN_PASSWORD_HASH) },
+      { label: "Acceso técnico separado", ok: Boolean(process.env.TECH_ADMIN_USERNAME && process.env.TECH_ADMIN_PASSWORD_HASH) },
       { label: "HTTPS en producción", ok: isVercel },
     ],
     audit: auditResult.data || [],
     auditAvailable: !auditResult.error,
   };
 }
-

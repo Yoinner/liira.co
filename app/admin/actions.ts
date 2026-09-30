@@ -23,7 +23,7 @@ export async function logoutAction() {
 }
 
 export async function saveCategory(formData: FormData) {
-  await requireAdmin();
+  await requireAdmin("business");
   const client = getSupabaseAdmin();
   if (!client) throw new Error("Supabase no está disponible");
   const name = String(formData.get("name") || "").trim();
@@ -53,7 +53,7 @@ export async function saveCategory(formData: FormData) {
 }
 
 export async function saveProduct(formData: FormData) {
-  await requireAdmin();
+  await requireAdmin("business");
   const client = getSupabaseAdmin();
   if (!client) throw new Error("Supabase no está disponible");
 
@@ -109,7 +109,7 @@ export async function saveProduct(formData: FormData) {
 }
 
 export async function updateInquiry(formData: FormData) {
-  await requireAdmin();
+  await requireAdmin("business");
   const client = getSupabaseAdmin();
   if (!client) throw new Error("Supabase no está disponible");
   const id = String(formData.get("id") || "");

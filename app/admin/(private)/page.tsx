@@ -2,11 +2,13 @@ import Link from "next/link";
 import { ArrowRight, CircleDollarSign, PackageSearch, ShoppingBag, Sparkles } from "lucide-react";
 import { formatCop } from "@/lib/config";
 import { getAdminData } from "@/lib/data/catalog";
+import { requireAdmin } from "@/lib/auth/session";
 
 function monthKey(date: Date) { return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`; }
 function monthLabel(date: Date) { return new Intl.DateTimeFormat("es-CO", { month: "short" }).format(date).replace(".", ""); }
 
 export default async function AdminDashboard() {
+  await requireAdmin("business");
   const { products, inquiries, available } = await getAdminData();
   const now = new Date();
   const months = [2, 1, 0].map((offset) => new Date(now.getFullYear(), now.getMonth() - offset, 1));

@@ -1,5 +1,6 @@
 import { Activity, CheckCircle2, Cloud, Database, HardDrive, LockKeyhole, TriangleAlert } from "lucide-react";
 import { getSystemHealth, type HealthState } from "@/lib/data/system-health";
+import { requireAdmin } from "@/lib/auth/session";
 
 const labels: Record<HealthState, string> = {
   connected: "Conectado",
@@ -11,6 +12,7 @@ const labels: Record<HealthState, string> = {
 const icons = [Cloud, Database, HardDrive, Activity];
 
 export default async function TechnicalPage() {
+  await requireAdmin("technical");
   const health = await getSystemHealth();
   return <main className="admin-content tech-page">
     <div className="admin-title"><div><p className="admin-kicker">Mission Control</p><h1>Estado técnico</h1><p className="tech-intro">Salud real del sitio y sus integraciones, sin exponer credenciales.</p></div></div>
@@ -41,4 +43,3 @@ export default async function TechnicalPage() {
     </section>
   </main>;
 }
-

@@ -2,8 +2,10 @@ import Image from "next/image";
 import { ImagePlus, Pencil } from "lucide-react";
 import { saveCategory } from "@/app/admin/actions";
 import { getAdminData } from "@/lib/data/catalog";
+import { requireAdmin } from "@/lib/auth/session";
 
 export default async function CategoriesPage({ searchParams }: { searchParams: Promise<{ edit?: string }> }) {
+  await requireAdmin("business");
   const params = await searchParams;
   const { categories } = await getAdminData();
   const editing = categories.find((category) => category.id === params.edit);
