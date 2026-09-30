@@ -4,15 +4,23 @@ import { ArrowDownRight, ArrowRight, Gem, Heart, MapPin, PackageCheck, Sparkles 
 import { ProductCard } from "@/components/public/product-card";
 import { getCatalog } from "@/lib/data/catalog";
 
-const inspirations = [
-  { src: "/media/instagram/denario-ambar.jpg", title: "Denarios", copy: "Fe que acompaña" },
-  { src: "/media/instagram/cordon-esmeralda.jpg", title: "Cordones Murano", copy: "Color que transforma" },
-  { src: "/media/instagram/denario-marfil.jpg", title: "Rosarios de mano", copy: "Luz y significado" },
+const categoryFallbacks = [
+  { src: "/media/instagram/denario-ambar.jpg", title: "Denarios", copy: "Fe que acompaña", slug: "denarios" },
+  { src: "/media/instagram/cordon-esmeralda.jpg", title: "Cordones Murano", copy: "Color que transforma", slug: "cordones-murano" },
+  { src: "/media/instagram/denario-marfil.jpg", title: "Rosarios de mano", copy: "Luz y significado", slug: "rosarios-de-mano" },
 ];
 
 export default async function HomePage() {
-  const { products } = await getCatalog();
+  const { products, categories } = await getCatalog();
   const featured = products.filter((product) => product.featured).slice(0, 4);
+  const inspirations = (categories.length ? categories.slice(0, 3).map((category, index) => ({
+    src: category.image_url || categoryFallbacks[index]?.src || "/media/instagram/cordones-murano.jpg",
+    title: category.name,
+    copy: category.description
+      ? `${category.description.slice(0, 52)}${category.description.length > 52 ? "…" : ""}`
+      : categoryFallbacks[index]?.copy || "Hecho a mano",
+    slug: category.slug,
+  })) : categoryFallbacks);
 
   return (
     <>
@@ -48,7 +56,7 @@ export default async function HomePage() {
         </div>
         <div className="inspiration-grid">
           {inspirations.map((item, index) => (
-            <Link href="/catalogo" className={`inspiration-card card-${index + 1}`} key={item.title}>
+            <Link href={`/catalogo?categoria=${item.slug}`} className={`inspiration-card card-${index + 1}`} key={item.title}>
               <Image src={item.src} alt={`${item.title} hechos a mano por Liira`} fill sizes="(max-width: 700px) 90vw, 33vw" />
               <div className="inspiration-overlay"><span>0{index + 1}</span><div><p>{item.copy}</p><h3>{item.title}</h3></div><ArrowRight size={20} /></div>
             </Link>

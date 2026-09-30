@@ -38,8 +38,18 @@ export async function saveCategory(formData: FormData) {
   };
   const result = id ? await client.from("categories").update(record).eq("id", id) : await client.from("categories").insert(record);
   if (result.error) throw new Error("No se pudo guardar la categoría");
+  const cover = formData.get("image");
+  if (cover instanceof File && cover.size > 0) {
+    if (!cover.type.startsWith("image/") || cover.size > 8 * 1024 * 1024) {
+      throw new Error("La imagen debe ser JPG, PNG o WebP y pesar máximo 8 MB");
+    }
+    const storagePath = `categories/${record.slug}/cover`;
+    const upload = await client.storage.from("products").upload(storagePath, await cover.arrayBuffer(), { contentType: cover.type, upsert: true });
+    if (upload.error) throw new Error("No se pudo subir la imagen de la categoría");
+  }
   revalidatePath("/admin/categorias");
   revalidatePath("/catalogo");
+  revalidatePath("/");
 }
 
 export async function saveProduct(formData: FormData) {

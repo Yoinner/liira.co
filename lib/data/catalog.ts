@@ -4,6 +4,15 @@ import { cache } from "react";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
 import type { Category, Inquiry, Product } from "@/lib/types";
 
+async function withCategoryCovers(client: NonNullable<ReturnType<typeof getSupabaseAdmin>>, rows: Category[]) {
+  return Promise.all(rows.map(async (category) => {
+    const path = `categories/${category.slug}`;
+    const { data, error } = await client.storage.from("products").list(path, { limit: 1, search: "cover" });
+    if (error || !data?.some((file) => file.name === "cover")) return { ...category, image_url: null };
+    return { ...category, image_url: client.storage.from("products").getPublicUrl(`${path}/cover`).data.publicUrl };
+  }));
+}
+
 type CatalogResult = {
   products: Product[];
   categories: Category[];
@@ -28,6 +37,7 @@ export const getCatalog = cache(async (): Promise<CatalogResult> => {
 
     if (productsError || categoriesError) throw productsError || categoriesError;
 
+    const categoryRows = await withCategoryCovers(client, (categories || []) as Category[]);
     return {
       products: (products || []).map((product) => ({
         ...product,
@@ -35,7 +45,7 @@ export const getCatalog = cache(async (): Promise<CatalogResult> => {
           (a: { sort_order: number }, b: { sort_order: number }) => a.sort_order - b.sort_order,
         ),
       })) as Product[],
-      categories: (categories || []) as Category[],
+      categories: categoryRows,
       available: true,
     };
   } catch {
@@ -78,9 +88,10 @@ export async function getAdminData() {
   ]);
 
   const available = !productsResult.error && !categoriesResult.error && !inquiriesResult.error;
+  const categoryRows = await withCategoryCovers(client, (categoriesResult.data || []) as Category[]);
   return {
     products: (productsResult.data || []) as Product[],
-    categories: (categoriesResult.data || []) as Category[],
+    categories: categoryRows,
     inquiries: (inquiriesResult.data || []) as Inquiry[],
     available,
   };
