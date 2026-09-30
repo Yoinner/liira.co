@@ -36,7 +36,13 @@ create table if not exists public.product_images (
   created_at timestamptz not null default now()
 );
 
-create type public.inquiry_status as enum ('contacto', 'vendido', 'no_vendido');
+do $$
+begin
+  create type public.inquiry_status as enum ('contacto', 'vendido', 'no_vendido');
+exception
+  when duplicate_object then null;
+end
+$$;
 
 create table if not exists public.inquiries (
   id uuid primary key default gen_random_uuid(),

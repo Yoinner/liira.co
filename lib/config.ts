@@ -7,7 +7,11 @@ export const siteConfig = {
   location: "Bucaramanga, Colombia",
   instagram: "https://www.instagram.com/liira.co/",
   whatsapp: process.env.NEXT_PUBLIC_WHATSAPP_NUMBER || "573016399833",
-  url: process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000",
+  url:
+    process.env.NEXT_PUBLIC_APP_URL ||
+    (process.env.VERCEL_PROJECT_PRODUCTION_URL
+      ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`
+      : "http://localhost:3000"),
   founded: "Junio de 2026",
 } as const;
 
