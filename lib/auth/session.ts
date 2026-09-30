@@ -71,7 +71,8 @@ export async function hasAdminSession() {
 export async function requireAdmin(role?: AdminRole) {
   const session = await getAdminSession();
   if (!session) redirect("/admin/login");
-  if (role && session.role !== role) redirect(session.role === "technical" ? "/admin/tecnico" : "/admin");
+  const authorized = !role || session.role === "technical" || session.role === role;
+  if (!authorized) redirect("/admin");
   return session;
 }
 
