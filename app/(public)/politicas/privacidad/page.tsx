@@ -1,0 +1,7 @@
+import type { Metadata } from "next";
+
+export const metadata: Metadata = { title: "Política de privacidad" };
+
+export default function PrivacyPage() {
+  return <article className="legal-content"><p className="eyebrow">Última actualización: septiembre de 2026</p><h1>Privacidad y datos</h1><p>Liira usa únicamente los datos necesarios para atender solicitudes, gestionar pedidos y mantener el historial operativo del negocio.</p><h2>Datos que podemos recibir</h2><p>Nombre, número de contacto, preferencias de diseño, productos consultados y estado comercial de una solicitud. Los pagos y comprobantes se coordinan directamente por los canales informados y no se almacenan en esta web.</p><h2>Para qué se usan</h2><p>Para responder tu solicitud, preparar una cotización, dar seguimiento al pedido, coordinar el envío y resolver novedades relacionadas con la compra.</p><h2>Con quién se comparten</h2><p>Solo con proveedores necesarios para completar el servicio —por ejemplo, la empresa transportadora— cuando corresponda y con la información mínima necesaria.</p><h2>Tus solicitudes</h2><p>Puedes pedir consulta, corrección o eliminación de tus datos escribiendo al WhatsApp oficial de Liira. Algunas obligaciones comerciales pueden requerir conservar información durante el plazo aplicable.</p><h2>Seguridad</h2><p>El acceso al panel operativo es privado y las credenciales no se exponen al navegador. Aun así, ningún sistema conectado a internet puede prometer riesgo cero.</p></article>;
+}

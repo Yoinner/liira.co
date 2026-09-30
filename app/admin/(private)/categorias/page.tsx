@@ -1,0 +1,10 @@
+import { Pencil } from "lucide-react";
+import { saveCategory } from "@/app/admin/actions";
+import { getAdminData } from "@/lib/data/catalog";
+
+export default async function CategoriesPage({ searchParams }: { searchParams: Promise<{ edit?: string }> }) {
+  const params = await searchParams;
+  const { categories } = await getAdminData();
+  const editing = categories.find((category) => category.id === params.edit);
+  return <main className="admin-content"><div className="admin-title"><div><p className="admin-kicker">Organización</p><h1>Categorías</h1></div></div><section className="category-admin-grid"><form action={saveCategory} className="admin-panel category-form"><div><p className="admin-kicker">{editing ? "Editar categoría" : "Nueva categoría"}</p><h2>{editing?.name || "Agrupa tus piezas"}</h2></div><input type="hidden" name="id" value={editing?.id || ""} /><label>Nombre<input name="name" defaultValue={editing?.name} required /></label><label>Descripción <small>Opcional</small><textarea name="description" rows={4} defaultValue={editing?.description || ""} /></label><label>Orden<input type="number" name="sort_order" defaultValue={editing?.sort_order || 0} /></label><label className="checkbox-label"><input type="checkbox" name="active" defaultChecked={editing?.active ?? true} /> Categoría visible</label><button className="admin-primary" type="submit">{editing ? "Guardar cambios" : "Crear categoría"}</button></form><div className="admin-panel category-list"><div className="panel-heading"><h2>Categorías actuales</h2></div>{categories.length ? categories.map((category) => <div className="category-row" key={category.id}><span>{String(category.sort_order).padStart(2, "0")}</span><div><strong>{category.name}</strong><small>{category.description || "Sin descripción"}</small></div><em>{category.active ? "Visible" : "Oculta"}</em><a href={`/admin/categorias?edit=${category.id}`} aria-label={`Editar ${category.name}`}><Pencil size={16} /></a></div>) : <div className="admin-empty"><p>No hay categorías todavía.</p></div>}</div></section></main>;
+}
