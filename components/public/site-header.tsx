@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Menu, Sparkles } from "lucide-react";
+import { ArrowUpRight, Menu } from "lucide-react";
 import { navigation, whatsappUrl } from "@/lib/config";
 
 export function SiteHeader() {
@@ -15,7 +15,7 @@ export function SiteHeader() {
           ))}
         </nav>
         <a className="header-cta" href={whatsappUrl("Hola Liira, quiero conocer sus piezas disponibles.")} target="_blank" rel="noreferrer">
-          <Sparkles size={15} aria-hidden="true" /> Hacer un pedido
+          <span>Hacer un pedido</span><ArrowUpRight size={15} aria-hidden="true" />
         </a>
         <details className="mobile-menu">
           <summary aria-label="Abrir menú"><Menu size={21} /></summary>
@@ -27,7 +27,7 @@ export function SiteHeader() {
           </nav>
         </details>
       </div>
-      <div className="shipping-strip">Hecho a mano en Bucaramanga <span>✦</span> Envíos a toda Colombia</div>
+      <div className="shipping-strip"><span>Hecho a mano en Bucaramanga</span><i>✦</i><span>Envíos a toda Colombia</span><i>✦</i><span>Piezas personalizadas</span></div>
     </header>
   );
 }

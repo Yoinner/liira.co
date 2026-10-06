@@ -1,6 +1,6 @@
 # Investigación competitiva — Liira
 
-Fecha: 29 de septiembre de 2026.
+Fecha inicial: 29 de septiembre de 2026. Revisión visual: 5 de octubre de 2026.
 
 ## Referencias observadas
 
@@ -29,3 +29,21 @@ Tesis defendible: **devoción contemporánea bajo la luz cálida de Bucaramanga*
 Interacción distintiva: una solicitud contextual por producto o pieza personalizada que arma el mensaje, registra el contacto antes de abrir WhatsApp y alimenta el seguimiento y las ventas del panel.
 
 Información aún por confirmar: precios y nombres comerciales de productos, tarifas y transportadora, plazos definitivos, medios de pago, garantía formal, razón social/NIT y datos de contacto diferentes de WhatsApp.
+
+## Evolución visual — octubre de 2026
+
+Referencias de frontera revisadas: Jewel, ORVELLE Jewellery, Maison Elowen, Aurum y Glintura en Framer Marketplace. Se observaron como patrones, no como plantillas: fotografía de producto con protagonismo, composición editorial, navegación silenciosa, colecciones curadas, detalle de pieza y continuidad entre catálogo y pedido.
+
+### Tesis creativa
+
+**Joya viva:** una vitrina editorial cálida donde el murano parece capturar luz y movimiento. El sistema une marfil luminoso, vino profundo, rosa mineral y pequeños destellos dorados con tipografía de alto contraste y encuadres escultóricos.
+
+Principios:
+
+1. Cada fotografía funciona como una vitrina, no como relleno de una cuadrícula.
+2. La información comercial siempre permanece legible y cercana, incluso cuando la composición es expresiva.
+3. El motivo circular del reflejo de murano conecta portada, categorías, producto, personalización y panel privado.
+
+Se evita: estética de ecommerce genérico, exceso de tarjetas idénticas, dorado ornamental sin función, animación continua, dark mode aplicado a toda la tienda y recursos que compitan con el producto.
+
+La interacción distintiva sigue siendo la solicitud contextual registrada antes de WhatsApp. Los pagos continúan fuera del alcance de esta revisión hasta autorización expresa.

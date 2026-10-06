@@ -17,7 +17,7 @@ export default async function CatalogPage({ searchParams }: { searchParams: Prom
   return (
     <div className="catalog-page container page-space">
       <header className="page-hero catalog-hero">
-        <div><p className="eyebrow">Colección Liira</p><h1>Piezas para llevar<br /><em>tu esencia.</em></h1></div>
+        <div><p className="eyebrow">Colección Liira</p><h1>Piezas para llevar<br />{" "}<em>tu esencia.</em></h1></div>
         <p>Hechas a mano con murano y detalles elegidos para convertir color, fe y estilo en algo que se siente propio.</p>
       </header>
       <div className="catalog-toolbar">

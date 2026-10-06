@@ -9,7 +9,7 @@ export default function AboutPage() {
   return (
     <div className="about-page page-space">
       <section className="about-hero container">
-        <div><p className="eyebrow">Nuestra historia · Desde junio de 2026</p><h1>Lo que empezó como un sueño,<br /><em>hoy se lleva puesto.</em></h1></div>
+        <div><p className="eyebrow">Nuestra historia · Desde junio de 2026</p><h1>Lo que empezó como un sueño,<br />{" "}<em>hoy se lleva puesto.</em></h1></div>
         <p>Liira nació en Bucaramanga del amor por los detalles y de una certeza: una pieza puede decir quién eres, acompañar tu fe y transformar cómo te sientes.</p>
       </section>
       <section className="about-mosaic container">

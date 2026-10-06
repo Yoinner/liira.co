@@ -26,8 +26,9 @@ export default async function HomePage() {
     <>
       <section className="hero">
         <div className="hero-copy">
+          <span className="hero-edition">Atelier 01 · 2026</span>
           <p className="eyebrow"><span /> Accesorios hechos a mano · Bucaramanga</p>
-          <h1>Tu historia,<br /><em>hecha luz.</em></h1>
+          <h1>Tu historia,<br />{" "}<em>hecha luz.</em></h1>
           <p className="hero-lead">Cordones de murano, denarios y piezas que hablan de ti. Cada combinación nace a mano y puede hacerse en tus colores.</p>
           <div className="hero-actions">
             <Link href="/catalogo" className="button primary">Explorar la colección <ArrowRight size={17} /></Link>
@@ -40,6 +41,7 @@ export default async function HomePage() {
         </div>
         <div className="hero-visual">
           <div className="hero-orbit" aria-hidden="true"><span /><span /><span /></div>
+          <div className="hero-lens" aria-hidden="true"><i /><b>Murano</b><small>captura la luz</small></div>
           <Image src="/media/instagram/cordon-esmeralda.jpg" alt="Cordón verde de murano Liira, usado de tres formas" fill priority loading="eager" sizes="(max-width: 800px) 100vw, 54vw" />
           <div className="hero-caption"><span>01</span><p>Una pieza.<br />Muchas formas de llevarla.</p></div>
         </div>
@@ -50,8 +52,9 @@ export default async function HomePage() {
       </section>
 
       <section className="editorial-section container">
+        <p className="section-number" aria-hidden="true">01 / Colecciones</p>
         <div className="section-heading split-heading">
-          <div><p className="eyebrow">Elige lo que quieres llevar contigo</p><h2>Más que un accesorio,<br /><em>un pequeño ritual.</em></h2></div>
+          <div><p className="eyebrow">Elige lo que quieres llevar contigo</p><h2>Más que un accesorio,<br />{" "}<em>un pequeño ritual.</em></h2></div>
           <p>Diseños versátiles que unen brillo, color y significado. Piezas para elevar un look, regalar intención o recordar lo esencial.</p>
         </div>
         <div className="inspiration-grid">
@@ -67,6 +70,7 @@ export default async function HomePage() {
       {featured.length > 0 && (
         <section className="collection-section">
           <div className="container">
+            <p className="section-number" aria-hidden="true">02 / Disponibles</p>
             <div className="section-heading inline-heading"><div><p className="eyebrow">Disponibles ahora</p><h2>Piezas para encontrarte</h2></div><Link href="/catalogo" className="text-link">Ver toda la colección <ArrowRight size={16} /></Link></div>
             <div className="product-grid">{featured.map((product) => <ProductCard product={product} key={product.id} />)}</div>
           </div>
@@ -79,8 +83,9 @@ export default async function HomePage() {
           <div className="sun-stamp" aria-hidden="true"><Sparkles /><span>Tu idea<br />Tu color<br />Tu Liira</span></div>
         </div>
         <div className="custom-copy">
+          <p className="section-number light-number" aria-hidden="true">03 / Tu pieza</p>
           <p className="eyebrow">Atelier de color</p>
-          <h2>Imagínala.<br /><em>Nosotras la hacemos.</em></h2>
+          <h2>Imagínala.<br />{" "}<em>Nosotras la hacemos.</em></h2>
           <p>Elige el tipo de pieza, la paleta y los detalles que quieres llevar. Te acompañamos por WhatsApp para convertir tu idea en una combinación única.</p>
           <ol>
             <li><span>01</span><div><strong>Cuéntanos tu idea</strong><p>Color, ocasión, inspiración o significado.</p></div></li>
@@ -92,6 +97,7 @@ export default async function HomePage() {
       </section>
 
       <section className="values-section container">
+        <p className="section-number" aria-hidden="true">04 / Nuestro sello</p>
         <div className="values-intro"><p className="eyebrow">El sello Liira</p><h2>Detalles que se sienten<br />antes de explicarse.</h2></div>
         <div className="values-grid">
           <article><Gem /><span>01</span><h3>Brillo con intención</h3><p>Combinaciones pensadas para que el murano dialogue con tu estilo.</p></article>

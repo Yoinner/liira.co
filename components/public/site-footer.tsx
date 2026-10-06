@@ -6,7 +6,11 @@ import { siteConfig, whatsappUrl } from "@/lib/config";
 export function SiteFooter() {
   return (
     <footer className="site-footer">
-      <div className="footer-art" aria-hidden="true">L</div>
+      <div className="footer-art" aria-hidden="true">Liira</div>
+      <div className="footer-intro">
+        <p>Un detalle puede guardar una historia.</p>
+        <a href={whatsappUrl("Hola Liira, quiero crear una pieza especial.")} target="_blank" rel="noreferrer">Hablemos de la tuya <span>↗</span></a>
+      </div>
       <div className="footer-grid">
         <div className="footer-brand">
           <Image src="/brand/liira-logo.png" width={112} height={112} alt="Liira Accesorios" />
@@ -32,7 +36,7 @@ export function SiteFooter() {
         </div>
       </div>
       <div className="footer-bottom">
-        <span>© {new Date().getFullYear()} Liira</span>
+        <span>© {new Date().getFullYear()} Liira · Bucaramanga</span>
         <span>Creado con intención, pieza por pieza.</span>
       </div>
     </footer>

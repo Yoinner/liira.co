@@ -1,6 +1,8 @@
 import type { Metadata, Viewport } from "next";
 import { Cormorant_Garamond, Manrope } from "next/font/google";
 import "./globals.css";
+import "./liira-public.css";
+import "./liira-admin.css";
 import { siteConfig } from "@/lib/config";
 
 const display = Cormorant_Garamond({

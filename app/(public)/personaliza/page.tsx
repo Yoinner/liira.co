@@ -13,7 +13,7 @@ export default function PersonalizePage() {
       <section className="personalize-grid container">
         <div className="personalize-copy">
           <p className="eyebrow">Atelier Liira</p>
-          <h1>Una idea tuya.<br /><em>Una pieza irrepetible.</em></h1>
+          <h1>Una idea tuya.<br />{" "}<em>Una pieza irrepetible.</em></h1>
           <p>Cuéntanos qué quieres crear: un cordón que transforme un look, un denario para acompañarte o un detalle con un significado especial.</p>
           <div className="color-notes"><span>Vino</span><span>Marfil</span><span>Ámbar</span><span>Esmeralda</span><span>Tu color</span></div>
         </div>
