@@ -59,14 +59,12 @@ export function InquiryComposer({ productId, productName = "Pieza personalizada"
   return (
     <form action={submit} className={compact ? "inquiry-form compact" : "inquiry-form"}>
       <div className="honeypot" aria-hidden="true"><label>Website<input name="website" tabIndex={-1} autoComplete="off" /></label></div>
-      {!compact && (
-        <div className="form-grid two">
-          <label>Tu nombre <input name="name" placeholder="¿Cómo te llamas?" maxLength={80} /></label>
-          <label>WhatsApp <input name="phone" inputMode="tel" placeholder="Tu número" maxLength={30} /></label>
-        </div>
-      )}
+      <div className="form-grid two">
+        <label>Tu nombre <input name="name" placeholder="¿Cómo te llamas?" minLength={2} maxLength={80} autoComplete="name" required /></label>
+        <label>WhatsApp <input name="phone" type="tel" inputMode="tel" placeholder="Ej. 301 639 9833" minLength={7} maxLength={30} autoComplete="tel" required /></label>
+      </div>
       <label>Color que imaginas <input name="color" placeholder="Ej. vino, marfil, verde esmeralda…" maxLength={80} /></label>
-      <label>Cuéntanos cómo la quieres <textarea name="details" rows={compact ? 3 : 4} placeholder="Tipo de pieza, ocasión, dijes o combinación de colores" maxLength={600} /></label>
+      <label>Cuéntanos cómo la quieres <textarea name="details" rows={compact ? 3 : 4} placeholder="Tipo de pieza, ocasión, dijes o combinación de colores" minLength={4} maxLength={600} required /></label>
       <button className="button primary wide" disabled={pending} type="submit">
         {pending ? "Preparando mensaje…" : <><MessageCircle size={18} /> Continuar en WhatsApp <Send size={15} /></>}
       </button>

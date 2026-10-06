@@ -1,4 +1,4 @@
-import { Activity, CheckCircle2, Cloud, Database, HardDrive, LockKeyhole, TriangleAlert } from "lucide-react";
+import { Activity, CheckCircle2, Cloud, Database, HardDrive, LockKeyhole, MessageCircle, TriangleAlert, UsersRound } from "lucide-react";
 import { getSystemHealth, type HealthState } from "@/lib/data/system-health";
 import { requireAdmin } from "@/lib/auth/session";
 
@@ -9,7 +9,7 @@ const labels: Record<HealthState, string> = {
   unavailable: "No disponible",
 };
 
-const icons = [Cloud, Database, HardDrive, Activity];
+const icons = [Cloud, Database, HardDrive, UsersRound, MessageCircle, Activity];
 
 export default async function TechnicalPage() {
   await requireAdmin("technical");

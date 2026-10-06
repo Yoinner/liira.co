@@ -34,6 +34,8 @@ export type Product = {
 };
 
 export type InquiryStatus = "contacto" | "vendido" | "no_vendido";
+export type PipelineStage = "nuevo" | "contactado" | "cotizado" | "seguimiento" | "ganado" | "perdido";
+export type InquiryPriority = "baja" | "normal" | "alta";
 
 export type Inquiry = {
   id: string;
@@ -44,7 +46,64 @@ export type Inquiry = {
   color_preference: string | null;
   customization: string | null;
   status: InquiryStatus;
+  pipeline_stage: PipelineStage;
+  priority: InquiryPriority;
+  customer_id: string | null;
+  source: string;
+  next_follow_up_at: string | null;
+  last_contacted_at: string | null;
+  lost_reason: string | null;
+  tags: string[];
   sale_amount: number | null;
   sold_at: string | null;
+  created_at: string;
+  updated_at?: string;
+};
+
+export type Customer = {
+  id: string;
+  normalized_phone: string | null;
+  name: string;
+  phone: string | null;
+  email: string | null;
+  instagram_handle: string | null;
+  city: string | null;
+  preferences: string | null;
+  tags: string[];
+  transactional_consent: boolean;
+  marketing_consent: boolean;
+  first_seen_at: string;
+  last_contact_at: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type CustomerNote = {
+  id: string;
+  customer_id: string;
+  inquiry_id: string | null;
+  note: string;
+  created_by_role: "business" | "technical";
+  created_at: string;
+};
+
+export type CustomerActivity = {
+  id: string;
+  customer_id: string | null;
+  inquiry_id: string | null;
+  activity_type: string;
+  summary: string;
+  metadata: Record<string, unknown>;
+  actor_role: "business" | "technical" | null;
+  created_at: string;
+};
+
+export type InventoryMovement = {
+  id: string;
+  product_id: string;
+  delta: number;
+  balance_after: number;
+  reason: string;
+  actor_role: "business" | "technical";
   created_at: string;
 };

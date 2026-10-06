@@ -1,0 +1,78 @@
+import "server-only";
+
+import { cache } from "react";
+import { getSupabaseAdmin } from "@/lib/supabase/server";
+import type { Customer, CustomerActivity, CustomerNote, Inquiry, InventoryMovement, Product } from "@/lib/types";
+
+export type CrmData = {
+  customers: Customer[];
+  inquiries: Inquiry[];
+  activities: CustomerActivity[];
+  notes: CustomerNote[];
+  movements: InventoryMovement[];
+  available: boolean;
+  schemaReady: boolean;
+};
+
+const empty: CrmData = {
+  customers: [], inquiries: [], activities: [], notes: [], movements: [], available: false, schemaReady: false,
+};
+
+export const getCrmData = cache(async (): Promise<CrmData> => {
+  const client = getSupabaseAdmin();
+  if (!client) return empty;
+
+  const [customers, inquiries, activities, notes, movements] = await Promise.all([
+    client.from("customers").select("*").order("updated_at", { ascending: false }).limit(500),
+    client.from("inquiries").select("*").order("created_at", { ascending: false }).limit(500),
+    client.from("customer_activities").select("*").order("created_at", { ascending: false }).limit(600),
+    client.from("customer_notes").select("*").order("created_at", { ascending: false }).limit(500),
+    client.from("inventory_movements").select("*").order("created_at", { ascending: false }).limit(500),
+  ]);
+
+  const schemaReady = !customers.error && !activities.error && !notes.error && !movements.error;
+  return {
+    customers: (customers.data || []) as Customer[],
+    inquiries: (inquiries.data || []) as Inquiry[],
+    activities: (activities.data || []) as CustomerActivity[],
+    notes: (notes.data || []) as CustomerNote[],
+    movements: (movements.data || []) as InventoryMovement[],
+    available: !inquiries.error,
+    schemaReady,
+  };
+});
+
+export const getCustomerDetail = cache(async (id: string) => {
+  const client = getSupabaseAdmin();
+  if (!client) return null;
+  const [customer, inquiries, notes, activities] = await Promise.all([
+    client.from("customers").select("*").eq("id", id).maybeSingle(),
+    client.from("inquiries").select("*").eq("customer_id", id).order("created_at", { ascending: false }),
+    client.from("customer_notes").select("*").eq("customer_id", id).order("created_at", { ascending: false }),
+    client.from("customer_activities").select("*").eq("customer_id", id).order("created_at", { ascending: false }).limit(100),
+  ]);
+  if (customer.error || !customer.data) return null;
+  return {
+    customer: customer.data as Customer,
+    inquiries: (inquiries.data || []) as Inquiry[],
+    notes: (notes.data || []) as CustomerNote[],
+    activities: (activities.data || []) as CustomerActivity[],
+  };
+});
+
+export async function searchAdminRecords(query: string) {
+  const client = getSupabaseAdmin();
+  const term = query.trim().slice(0, 80);
+  if (!client || term.length < 2) return { customers: [] as Customer[], inquiries: [] as Inquiry[], products: [] as Product[] };
+  const safe = term.replace(/[^a-zA-Z0-9áéíóúüñÁÉÍÓÚÜÑ@+ _-]/g, " ");
+  const [customers, inquiries, products] = await Promise.all([
+    client.from("customers").select("*").or(`name.ilike.%${safe}%,phone.ilike.%${safe}%,email.ilike.%${safe}%`).limit(20),
+    client.from("inquiries").select("*").or(`product_name.ilike.%${safe}%,customer_name.ilike.%${safe}%,customer_phone.ilike.%${safe}%`).limit(20),
+    client.from("products").select("*, category:categories(name,slug), images:product_images(*)").ilike("name", `%${safe}%`).limit(20),
+  ]);
+  return {
+    customers: (customers.data || []) as Customer[],
+    inquiries: (inquiries.data || []) as Inquiry[],
+    products: (products.data || []) as Product[],
+  };
+}

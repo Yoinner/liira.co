@@ -1,6 +1,8 @@
 import Link from "next/link";
-import { Boxes, ChartNoAxesCombined, Eye, FolderTree, Gauge, LogOut, MessageSquareText, Sparkles } from "lucide-react";
+import { Eye, LogOut, Sparkles } from "lucide-react";
 import { logoutAction } from "@/app/admin/actions";
+import { AdminNav } from "@/components/admin/admin-nav";
+import { AdminTools } from "@/components/admin/admin-tools";
 import { requireAdmin } from "@/lib/auth/session";
 
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
@@ -13,10 +15,10 @@ export default async function AdminLayout({ children }: { children: React.ReactN
         <Link href={technical ? "/admin/tecnico" : "/admin"} className="admin-wordmark">Liira<span>{technical ? "Mission Control" : "Studio Admin"}</span></Link>
         <div className="admin-profile"><span><Sparkles size={15} /></span><div><strong>{technical ? "Acceso técnico" : "Equipo Liira"}</strong><small>{technical ? "Superadministrador" : "Operación comercial"}</small></div></div>
         <p className="admin-nav-label">Espacio de trabajo</p>
-        <nav><Link href="/admin"><ChartNoAxesCombined /> Resumen</Link><Link href="/admin/productos"><Boxes /> Productos</Link><Link href="/admin/categorias"><FolderTree /> Categorías</Link><Link href="/admin/solicitudes"><MessageSquareText /> Solicitudes</Link>{technical && <Link href="/admin/tecnico"><Gauge /> Estado técnico</Link>}</nav>
+        <AdminNav technical={technical} />
       </div>
       <form action={logoutAction}><button><LogOut /> Cerrar sesión</button></form>
     </aside>
-    <div className="admin-main"><header className="admin-topbar"><div><span className="status-dot" /><span><strong>{technical ? "Sistema operativo" : "Operación activa"}</strong><small>{today}</small></span></div><Link href="/" target="_blank"><Eye size={15} /> Ver tienda</Link></header>{children}</div>
+    <div className="admin-main"><header className="admin-topbar"><div className="admin-live-status"><span className="status-dot" /><span><strong>{technical ? "Sistema operativo" : "Operación activa"}</strong><small>{today}</small></span></div><AdminTools /><Link href="/" target="_blank" className="admin-store-link"><Eye size={15} /> Ver tienda</Link></header>{children}</div>
   </div>;
 }

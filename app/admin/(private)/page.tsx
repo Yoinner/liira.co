@@ -1,27 +1,65 @@
 import Link from "next/link";
-import { ArrowRight, CircleDollarSign, PackageSearch, ShoppingBag, Sparkles } from "lucide-react";
+import { ArrowRight, CalendarClock, CircleDollarSign, PackageSearch, Percent, ShoppingBag, Sparkles, TrendingDown, TrendingUp, UsersRound } from "lucide-react";
+import { dailyRevenue, percentChange, pipelineCounts, resolvePeriod, summarizePeriod } from "@/lib/admin/analytics";
 import { formatCop } from "@/lib/config";
 import { getAdminData } from "@/lib/data/catalog";
+import { getCrmData } from "@/lib/data/crm";
 import { requireAdmin } from "@/lib/auth/session";
 
-function monthKey(date: Date) { return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`; }
-function monthLabel(date: Date) { return new Intl.DateTimeFormat("es-CO", { month: "short" }).format(date).replace(".", ""); }
+type Search = Promise<{ period?: string; from?: string; to?: string }>;
 
-export default async function AdminDashboard() {
-  await requireAdmin("business");
-  const { products, inquiries, available } = await getAdminData();
-  const now = new Date();
-  const months = [2, 1, 0].map((offset) => new Date(now.getFullYear(), now.getMonth() - offset, 1));
-  const sales = months.map((month) => {
-    const rows = inquiries.filter((item) => item.status === "vendido" && item.sold_at && monthKey(new Date(item.sold_at)) === monthKey(month));
-    return { label: monthLabel(month), total: rows.reduce((sum, item) => sum + (item.sale_amount || 0), 0), count: rows.length };
-  });
-  const maxSale = Math.max(...sales.map((sale) => sale.total), 1);
-  const current = sales[2];
-  const pending = inquiries.filter((item) => item.status === "contacto");
-  const lowStock = products.filter((product) => product.stock > 0 && product.stock < 5);
-
-  return <main className="admin-content"><div className="admin-title"><div><p className="admin-kicker">Hoy en Liira</p><h1>Resumen del negocio</h1></div><Link href="/admin/productos?new=1" className="admin-primary"><Sparkles size={16} /> Nuevo producto</Link></div>{!available && <div className="admin-unavailable">El panel está listo, pero Supabase no está conectado. Los datos aparecerán cuando se configuren las variables.</div>}<section className="admin-kpis"><article><span><MessageSquareIcon /></span><div><small>Por contactar</small><strong>{pending.length}</strong><p>Solicitudes activas</p></div></article><article><span><ShoppingBag /></span><div><small>Ventas este mes</small><strong>{current.count}</strong><p>{formatCop(current.total)}</p></div></article><article><span><PackageSearch /></span><div><small>Stock bajo</small><strong>{lowStock.length}</strong><p>Piezas con menos de 5</p></div></article><article><span><CircleDollarSign /></span><div><small>Ingresos · 3 meses</small><strong>{formatCop(sales.reduce((sum, sale) => sum + sale.total, 0))}</strong><p>Solo ventas confirmadas</p></div></article></section><section className="admin-grid"><article className="admin-panel sales-panel"><div className="panel-heading"><div><p className="admin-kicker">Últimos 3 meses</p><h2>Ventas confirmadas</h2></div></div><div className="sales-chart">{sales.map((sale) => <div className="bar-column" key={sale.label}><div className="bar-value">{sale.total ? formatCop(sale.total) : "$0"}</div><div className="bar-track"><span style={{ height: `${Math.max((sale.total / maxSale) * 100, 3)}%` }} /></div><strong>{sale.label}</strong><small>{sale.count} {sale.count === 1 ? "venta" : "ventas"}</small></div>)}</div></article><article className="admin-panel queue-panel"><div className="panel-heading"><div><p className="admin-kicker">Siguiente acción</p><h2>Solicitudes recientes</h2></div><Link href="/admin/solicitudes">Ver todas <ArrowRight size={15} /></Link></div>{pending.length ? <div className="mini-queue">{pending.slice(0, 5).map((item) => <div key={item.id}><span>{item.customer_name?.slice(0, 1).toUpperCase() || "L"}</span><div><strong>{item.customer_name || "Contacto de WhatsApp"}</strong><small>{item.product_name}</small></div><time>{new Intl.DateTimeFormat("es-CO", { day: "numeric", month: "short" }).format(new Date(item.created_at))}</time></div>)}</div> : <div className="admin-empty"><MessageSquareIcon /><p>No hay solicitudes pendientes.</p><span>Las consultas enviadas desde la web aparecerán aquí.</span></div>}</article></section></main>;
+function Trend({ value }: { value: number }) {
+  const positive = value >= 0;
+  return <span className={`kpi-trend ${positive ? "positive" : "negative"}`}>{positive ? <TrendingUp /> : <TrendingDown />}{Math.abs(value).toFixed(0)}% vs. periodo anterior</span>;
 }
 
-function MessageSquareIcon() { return <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"><path d="M21 15a4 4 0 0 1-4 4H8l-5 3V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4z" /></svg>; }
+function RevenueLine({ points }: { points: ReturnType<typeof dailyRevenue> }) {
+  const max = Math.max(...points.map((point) => point.total), 1);
+  const width = 720;
+  const height = 210;
+  const path = points.map((point, index) => `${(index / Math.max(points.length - 1, 1)) * width},${height - (point.total / max) * 175 - 15}`).join(" ");
+  return <div className="revenue-line"><svg viewBox={`0 0 ${width} ${height}`} role="img" aria-label="Ingresos confirmados por día"><title>Ingresos confirmados por día</title><defs><linearGradient id="revenueFill" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="#b43b5b" stopOpacity=".28"/><stop offset="1" stopColor="#b43b5b" stopOpacity="0"/></linearGradient></defs><polygon points={`0,${height} ${path} ${width},${height}`} fill="url(#revenueFill)"/><polyline points={path} fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round"/></svg><div className="revenue-axis">{points.filter((_, index) => index === 0 || index === points.length - 1 || index === Math.floor(points.length / 2)).map((point) => <span key={point.key}>{point.label}</span>)}</div></div>;
+}
+
+export default async function AdminDashboard({ searchParams }: { searchParams: Search }) {
+  await requireAdmin("business");
+  const params = await searchParams;
+  const [{ products, inquiries: fallbackInquiries, available }, crm] = await Promise.all([getAdminData(), getCrmData()]);
+  const inquiries = crm.inquiries.length ? crm.inquiries : fallbackInquiries;
+  const period = resolvePeriod(params.period, params.from, params.to);
+  const current = summarizePeriod(inquiries, period.start, period.end);
+  const previous = summarizePeriod(inquiries, period.previousStart, period.previousEnd);
+  const revenue = dailyRevenue(inquiries, period.start, period.end);
+  const pipeline = pipelineCounts(inquiries);
+  const now = period.now.getTime();
+  const due = inquiries.filter((item) => item.status === "contacto" && item.next_follow_up_at && new Date(item.next_follow_up_at).getTime() <= now).sort((a, b) => new Date(a.next_follow_up_at || 0).getTime() - new Date(b.next_follow_up_at || 0).getTime());
+  const newLeads = inquiries.filter((item) => (item.pipeline_stage || "nuevo") === "nuevo");
+  const lowStock = products.filter((product) => product.stock < 5);
+  const sourceCounts = [...new Set(current.created.map((item) => item.source || "whatsapp_web"))].map((source) => ({ source, count: current.created.filter((item) => (item.source || "whatsapp_web") === source).length })).sort((a, b) => b.count - a.count);
+  const sourceMax = Math.max(...sourceCounts.map((item) => item.count), 1);
+
+  return <main className="admin-content admin-dashboard">
+    <div className="admin-title dashboard-title"><div><p className="admin-kicker">Centro de mando comercial</p><h1>Lo que necesita atención.</h1><p className="admin-lead">Ventas manuales, conversaciones, clientes e inventario en una sola lectura.</p></div><div className="title-actions"><Link href="/admin/solicitudes" className="admin-secondary">Ver pipeline</Link><Link href="/admin/productos?new=1" className="admin-primary"><Sparkles size={16} /> Nuevo producto</Link></div></div>
+    {!available && <div className="admin-unavailable">Supabase no está disponible. El panel conserva su estructura, pero no mostrará datos hasta recuperar la conexión.</div>}
+    {available && !crm.schemaReady && <div className="admin-unavailable">La actualización CRM todavía no está aplicada en Supabase. El catálogo sigue activo, pero clientes, seguimientos y trazabilidad necesitan la nueva migración.</div>}
+
+    <form className="period-filter" method="get"><div className="period-presets">{[["today","Hoy"],["yesterday","Ayer"],["7d","7 días"],["month","Este mes"],["90d","90 días"]].map(([value,label]) => <Link key={value} href={`/admin?period=${value}`} className={period.key === value ? "active" : ""}>{label}</Link>)}</div><div className="custom-period"><label>Desde<input type="date" name="from" defaultValue={params.from} /></label><label>Hasta<input type="date" name="to" defaultValue={params.to} /></label><input type="hidden" name="period" value="custom"/><button type="submit">Aplicar rango</button></div></form>
+
+    <section className="admin-kpis strategic-kpis">
+      <article><span><CircleDollarSign /></span><div><small>Ventas confirmadas</small><strong>{formatCop(current.revenue)}</strong><Trend value={percentChange(current.revenue, previous.revenue)} /></div></article>
+      <article><span><ShoppingBag /></span><div><small>Cierres</small><strong>{current.won.length}</strong><Trend value={percentChange(current.won.length, previous.won.length)} /></div></article>
+      <article><span><Percent /></span><div><small>Tasa de cierre</small><strong>{current.closeRate.toFixed(1)}%</strong><p>Ganadas ÷ solicitudes resueltas</p></div></article>
+      <article><span><UsersRound /></span><div><small>Ticket promedio</small><strong>{formatCop(current.averageTicket)}</strong><p>Promedio de ventas confirmadas</p></div></article>
+    </section>
+
+    <section className="dashboard-main-grid">
+      <article className="admin-panel revenue-panel"><div className="panel-heading"><div><p className="admin-kicker">Ingresos</p><h2>Ritmo del periodo</h2></div><strong>{formatCop(current.revenue)}</strong></div><RevenueLine points={revenue}/></article>
+      <article className="admin-panel attention-panel"><div className="panel-heading"><div><p className="admin-kicker">Trabajo de hoy</p><h2>Prioridades</h2></div></div><div className="attention-list"><Link href="/admin/solicitudes?view=overdue"><span className="attention-icon urgent"><CalendarClock /></span><div><strong>{due.length} seguimientos vencidos</strong><small>Conversaciones que ya necesitan respuesta</small></div><ArrowRight /></Link><Link href="/admin/solicitudes?stage=nuevo"><span className="attention-icon"><UsersRound /></span><div><strong>{newLeads.length} solicitudes nuevas</strong><small>Aún no marcadas como contactadas</small></div><ArrowRight /></Link><Link href="/admin/productos?stock=low"><span className="attention-icon warning"><PackageSearch /></span><div><strong>{lowStock.length} alertas de inventario</strong><small>Agotados o con menos de cinco unidades</small></div><ArrowRight /></Link></div></article>
+    </section>
+
+    <section className="dashboard-bottom-grid">
+      <article className="admin-panel pipeline-panel"><div className="panel-heading"><div><p className="admin-kicker">Embudo comercial</p><h2>Solicitudes por etapa</h2></div><Link href="/admin/solicitudes">Gestionar <ArrowRight /></Link></div><div className="pipeline-strip">{pipeline.map((item) => <Link href={`/admin/solicitudes?stage=${item.stage}`} key={item.stage} className={`pipeline-${item.stage}`}><small>{item.label}</small><strong>{item.count}</strong><span style={{ width: `${Math.max((item.count / Math.max(inquiries.length, 1)) * 100, item.count ? 8 : 0)}%` }}/></Link>)}</div><p className="metric-definition">Este embudo empieza cuando una persona envía una solicitud desde la web. No representa todavía visitas, carritos ni pagos.</p></article>
+      <article className="admin-panel source-panel"><div className="panel-heading"><div><p className="admin-kicker">Origen</p><h2>Canales registrados</h2></div></div>{sourceCounts.length ? <div className="source-bars">{sourceCounts.map((item) => <div key={item.source}><div><strong>{item.source === "whatsapp_web" ? "Web → WhatsApp" : item.source}</strong><span>{item.count}</span></div><i><span style={{ width: `${(item.count / sourceMax) * 100}%` }}/></i></div>)}</div> : <div className="admin-empty compact"><p>Sin solicitudes en el periodo.</p><span>Los canales aparecerán cuando existan contactos registrados.</span></div>}</article>
+    </section>
+  </main>;
+}

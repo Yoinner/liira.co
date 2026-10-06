@@ -6,13 +6,14 @@ export type HealthState = "connected" | "configured" | "degraded" | "unavailable
 
 export async function getSystemHealth() {
   const client = getSupabaseAdmin();
-  const [databaseResult, storageResult, auditResult] = client
+  const [databaseResult, storageResult, auditResult, crmResult] = client
     ? await Promise.all([
         client.from("categories").select("id", { count: "exact", head: true }),
         client.storage.listBuckets(),
         client.from("audit_events").select("id,action,entity_type,created_at").order("created_at", { ascending: false }).limit(8),
+        client.from("customers").select("id", { count: "exact", head: true }),
       ])
-    : [{ error: new Error("not configured"), count: null }, { error: new Error("not configured"), data: null }, { error: new Error("not configured"), data: null }];
+    : [{ error: new Error("not configured"), count: null }, { error: new Error("not configured"), data: null }, { error: new Error("not configured"), data: null }, { error: new Error("not configured"), count: null }];
 
   const storageReady = !storageResult.error && Boolean(storageResult.data?.some((bucket) => bucket.id === "products"));
   const isVercel = Boolean(process.env.VERCEL);
@@ -42,9 +43,19 @@ export async function getSystemHealth() {
         detail: !client ? "Variables ausentes" : storageReady ? "Bucket products disponible" : "Bucket products no disponible",
       },
       {
-        name: "WhatsApp",
+        name: "CRM operativo",
+        state: (!client ? "unavailable" : crmResult.error ? "degraded" : "connected") as HealthState,
+        detail: !client ? "Supabase no configurado" : crmResult.error ? "Migración CRM pendiente o consulta degradada" : `${crmResult.count ?? 0} clientes identificados`,
+      },
+      {
+        name: "WhatsApp manual",
         state: (process.env.NEXT_PUBLIC_WHATSAPP_NUMBER ? "configured" : "unavailable") as HealthState,
-        detail: process.env.NEXT_PUBLIC_WHATSAPP_NUMBER ? "Canal de pedidos configurado" : "Número no configurado",
+        detail: process.env.NEXT_PUBLIC_WHATSAPP_NUMBER ? "Enlaces wa.me activos; apertura registrada en CRM" : "Número no configurado",
+      },
+      {
+        name: "WhatsApp Cloud API",
+        state: (process.env.WHATSAPP_ACCESS_TOKEN && process.env.WHATSAPP_PHONE_NUMBER_ID ? "configured" : "unavailable") as HealthState,
+        detail: process.env.WHATSAPP_ACCESS_TOKEN && process.env.WHATSAPP_PHONE_NUMBER_ID ? "Credenciales presentes; falta prueba operativa" : "Pendiente hasta adquirir y configurar el número oficial",
       },
     ],
     security: [
