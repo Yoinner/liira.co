@@ -20,7 +20,7 @@ export function AdminNav({ technical }: { technical: boolean }) {
       const active = exact ? pathname === href : pathname.startsWith(href);
       return <Link key={href} href={href} aria-current={active ? "page" : undefined} className={active ? "active" : undefined}><Icon /> {label}</Link>;
     })}
-    {technical && <Link href="/admin/tecnico" aria-current={pathname.startsWith("/admin/tecnico") ? "page" : undefined} className={pathname.startsWith("/admin/tecnico") ? "active" : undefined}><Gauge /> Estado técnico</Link>}
+    {technical && <Link href="/admin/tecnico" aria-current={pathname.startsWith("/admin/tecnico") ? "page" : undefined} className={pathname.startsWith("/admin/tecnico") ? "active" : undefined}><Gauge /> Mission Control</Link>}
     <Link href="/admin/buscar" aria-current={pathname.startsWith("/admin/buscar") ? "page" : undefined} className="admin-nav-search"><Search /> Buscar</Link>
   </nav>;
 }

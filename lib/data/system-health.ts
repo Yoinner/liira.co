@@ -1,5 +1,6 @@
 import "server-only";
 
+import { siteConfig } from "@/lib/config";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
 
 export type HealthState = "connected" | "configured" | "degraded" | "unavailable";
@@ -49,8 +50,8 @@ export async function getSystemHealth() {
       },
       {
         name: "WhatsApp manual",
-        state: (process.env.NEXT_PUBLIC_WHATSAPP_NUMBER ? "configured" : "unavailable") as HealthState,
-        detail: process.env.NEXT_PUBLIC_WHATSAPP_NUMBER ? "Enlaces wa.me activos; apertura registrada en CRM" : "Número no configurado",
+        state: (siteConfig.whatsapp ? "configured" : "unavailable") as HealthState,
+        detail: siteConfig.whatsapp ? "Enlaces wa.me activos; apertura registrada en CRM" : "Número no configurado",
       },
       {
         name: "WhatsApp Cloud API",

@@ -1,15 +1,16 @@
 import Image from "next/image";
 import Link from "next/link";
 import { Check, ImagePlus, PackageCheck, Pencil, Plus, Search, Star, Trash2 } from "lucide-react";
-import { adjustInventory, deleteProductImage, makeProductImageCover, saveProduct } from "@/app/admin/actions";
+import { adjustInventory, deleteProduct, deleteProductImage, makeProductImageCover, saveProduct } from "@/app/admin/actions";
+import { ConfirmSubmitButton } from "@/components/admin/confirm-submit-button";
 import { formatCop } from "@/lib/config";
 import { getAdminData } from "@/lib/data/catalog";
 import { getCrmData } from "@/lib/data/crm";
 import { requireAdmin } from "@/lib/auth/session";
 
-type Search = Promise<{ edit?: string; new?: string; saved?: string; q?: string; stock?: string; category?: string }>;
+type SearchParams = Promise<{ edit?: string; new?: string; saved?: string; deleted?: string; q?: string; stock?: string; category?: string }>;
 
-export default async function ProductsAdminPage({ searchParams }: { searchParams: Search }) {
+export default async function ProductsAdminPage({ searchParams }: { searchParams: SearchParams }) {
   await requireAdmin("business");
   const params = await searchParams;
   const [{ products, categories, available }, crm] = await Promise.all([getAdminData(), getCrmData()]);
@@ -19,17 +20,83 @@ export default async function ProductsAdminPage({ searchParams }: { searchParams
   const filtered = products.filter((product) => {
     if (query && !product.name.toLowerCase().includes(query)) return false;
     if (params.category && product.category_id !== params.category) return false;
-    if (params.stock === "low" && !(product.stock < 5)) return false;
+    if (params.stock === "low" && product.stock >= 5) return false;
     if (params.stock === "out" && product.stock !== 0) return false;
     if (params.stock === "healthy" && product.stock < 5) return false;
     return true;
   });
   const productMovements = editing ? crm.movements.filter((item) => item.product_id === editing.id).slice(0, 8) : [];
-  const orderedImages = [...(editing?.images || [])].sort((a,b) => a.sort_order - b.sort_order);
+  const orderedImages = [...(editing?.images || [])].sort((a, b) => a.sort_order - b.sort_order);
 
-  return <main className="admin-content"><div className="admin-title"><div><p className="admin-kicker">Catálogo e inventario</p><h1>{showForm ? editing ? "Editar pieza" : "Nueva pieza" : "Productos bajo control."}</h1><p className="admin-lead">Publicación, precio, galería y existencias con trazabilidad.</p></div>{!showForm && <Link href="/admin/productos?new=1" className="admin-primary"><Plus size={16} /> Agregar producto</Link>}</div>{params.saved && <div className="admin-success"><Check size={17} /> Producto guardado y catálogo actualizado.</div>}{!available && <div className="admin-unavailable">Conecta Supabase para administrar el catálogo.</div>}
-    {showForm ? <div className="product-editor-layout"><section className="admin-panel product-editor"><div className="panel-heading"><div><p className="admin-kicker">{editing ? "Información pública" : "Nueva pieza"}</p><h2>{editing?.name || "Información del producto"}</h2></div><Link href="/admin/productos">Cancelar</Link></div><form action={saveProduct}><input type="hidden" name="id" value={editing?.id || ""} /><div className="admin-form-grid"><label className="span-2">Nombre<input name="name" defaultValue={editing?.name} required minLength={2} maxLength={160} /></label><label>Categoría<select name="category_id" defaultValue={editing?.category_id || ""}><option value="">Sin categoría</option>{categories.map((category) => <option value={category.id} key={category.id}>{category.name}</option>)}</select></label><label>Stock actual<input name="stock" type="number" min="0" max="99999" step="1" defaultValue={editing?.stock ?? 0} required /></label><label>Precio original<input name="price" type="number" min="0" max="999999999" step="100" defaultValue={editing?.price ?? ""} required placeholder="0" /></label><label>Precio rebajado <small>Opcional y menor al original</small><input name="sale_price" type="number" min="0" max="999999999" step="100" defaultValue={editing?.sale_price ?? ""} placeholder="Déjalo vacío si no aplica" /></label><label className="span-2">Descripción <small>Opcional</small><textarea name="description" rows={5} defaultValue={editing?.description || ""} maxLength={2000} placeholder="Materiales, detalles, inspiración o forma de uso" /></label><label className="span-2 upload-field"><ImagePlus size={23} /><span>{editing ? "Añadir imágenes a la galería" : "Sube una o varias imágenes"}</span><small>JPG, PNG o WebP · máximo 8 MB cada una</small><input name="images" type="file" accept="image/jpeg,image/png,image/webp" multiple /></label><div className="checkbox-row span-2"><label><input name="active" type="checkbox" defaultChecked={editing?.active ?? true} /> Visible en la tienda</label><label><input name="featured" type="checkbox" defaultChecked={editing?.featured ?? false} /> Destacar en inicio</label></div></div><div className="admin-form-actions"><Link href="/admin/productos">Cancelar</Link><button className="admin-primary" type="submit">Guardar producto</button></div></form></section>
-      {editing && <aside className="product-editor-side"><section className="admin-panel product-gallery-admin"><div className="panel-heading"><div><p className="admin-kicker">Galería</p><h2>Orden visual</h2></div></div>{orderedImages.length ? <div className="gallery-admin-grid">{orderedImages.map((image,index) => <div key={image.id} className={index === 0 ? "cover" : ""}><Image src={image.url} alt={image.alt || editing.name} fill sizes="160px"/>{index === 0 && <span><Star/> Principal</span>}<div>{index !== 0 && <form action={makeProductImageCover}><input type="hidden" name="image_id" value={image.id}/><button type="submit" aria-label="Usar como imagen principal"><Star/></button></form>}<form action={deleteProductImage}><input type="hidden" name="image_id" value={image.id}/><button type="submit" aria-label="Eliminar imagen"><Trash2/></button></form></div></div>)}</div> : <div className="admin-empty compact"><ImagePlus/><p>Sin imágenes</p></div>}</section><section className="admin-panel movement-panel"><div className="panel-heading"><div><p className="admin-kicker">Trazabilidad</p><h2>Inventario reciente</h2></div></div>{productMovements.length ? <div className="movement-list">{productMovements.map((movement) => <div key={movement.id}><strong className={movement.delta > 0 ? "positive" : "negative"}>{movement.delta > 0 ? "+" : ""}{movement.delta}</strong><span>{movement.reason}</span><small>Saldo {movement.balance_after} · {new Intl.DateTimeFormat("es-CO", { dateStyle:"medium", timeZone:"America/Bogota" }).format(new Date(movement.created_at))}</small></div>)}</div> : <p className="empty-inline">No hay movimientos auditados todavía.</p>}</section></aside>}
-    </div> : <><form className="catalog-filterbar" method="get"><label><Search/><input name="q" defaultValue={params.q} placeholder="Buscar producto" maxLength={80}/></label><select name="category" defaultValue={params.category || ""}><option value="">Todas las categorías</option>{categories.map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}</select><select name="stock" defaultValue={params.stock || ""}><option value="">Todo el inventario</option><option value="low">Stock bajo y agotado</option><option value="out">Solo agotados</option><option value="healthy">Stock saludable</option></select><button type="submit">Aplicar filtros</button>{(params.q || params.stock || params.category) && <Link href="/admin/productos">Limpiar</Link>}</form><section className="admin-panel table-panel">{filtered.length ? <div className="admin-table-wrap"><table className="admin-table product-control-table"><thead><tr><th>Producto</th><th>Precio</th><th>Inventario</th><th>Estado</th><th>Ajuste rápido</th><th /></tr></thead><tbody>{filtered.map((product) => <tr key={product.id}><td><div className="table-product">{product.images?.[0] ? <Image src={product.images[0].url} width={48} height={56} alt="" /> : <span>Li</span>}<div><strong>{product.name}</strong><small>{product.category?.name || "Sin categoría"} · {product.featured ? "Destacado" : "Catálogo"}</small></div></div></td><td>{product.sale_price ? <><del>{formatCop(product.price)}</del><br /><strong>{formatCop(product.sale_price)}</strong></> : formatCop(product.price)}</td><td><span className={product.stock === 0 ? "stock-pill zero" : product.stock < 5 ? "stock-pill low" : "stock-pill"}>{product.stock}</span></td><td><span className={`publish-state ${product.active ? "active" : "hidden"}`}>{product.active ? "Publicado" : "Oculto"}</span></td><td><form action={adjustInventory} className="inventory-quick-form"><input type="hidden" name="id" value={product.id}/><input name="delta" type="number" min="-999" max="999" step="1" placeholder="+ / −" aria-label="Cantidad a ajustar" required/><input name="reason" minLength={2} maxLength={240} placeholder="Motivo" aria-label="Motivo del ajuste" required/><button type="submit" aria-label={`Ajustar stock de ${product.name}`}><PackageCheck/></button></form></td><td><Link href={`/admin/productos?edit=${product.id}`} aria-label={`Editar ${product.name}`}><Pencil size={17} /></Link></td></tr>)}</tbody></table></div> : <div className="admin-empty tall"><ImagePlus /><p>No hay productos en esta vista.</p><span>Prueba otros filtros o agrega una nueva pieza.</span><Link href="/admin/productos?new=1" className="admin-primary">Agregar producto</Link></div>}</section></>}
+  return <main className="admin-content">
+    <div className="admin-title">
+      <div><p className="admin-kicker">Catálogo e inventario</p><h1>{showForm ? editing ? "Editar pieza" : "Nueva pieza" : "Productos bajo control."}</h1><p className="admin-lead">Publicación, precio, galería y existencias con trazabilidad.</p></div>
+      {!showForm && <Link href="/admin/productos?new=1" className="admin-primary"><Plus size={16} /> Agregar producto</Link>}
+    </div>
+    {params.saved && <div className="admin-success"><Check size={17} /> Producto guardado y catálogo actualizado.</div>}
+    {params.deleted && <div className="admin-success"><Check size={17} /> Producto eliminado y vitrina pública actualizada.</div>}
+    {!available && <div className="admin-unavailable">Conecta Supabase para administrar el catálogo.</div>}
+
+    {showForm ? <div className="product-editor-layout">
+      <section className="admin-panel product-editor">
+        <div className="panel-heading"><div><p className="admin-kicker">{editing ? "Información pública" : "Nueva pieza"}</p><h2>{editing?.name || "Información del producto"}</h2></div><Link href="/admin/productos">Cancelar</Link></div>
+        <form action={saveProduct}>
+          <input type="hidden" name="id" value={editing?.id || ""} />
+          <div className="admin-form-grid">
+            <label className="span-2">Nombre<input name="name" defaultValue={editing?.name} required minLength={2} maxLength={160} /></label>
+            <label>Categoría<select name="category_id" defaultValue={editing?.category_id || ""}><option value="">Sin categoría</option>{categories.map((category) => <option value={category.id} key={category.id}>{category.name}</option>)}</select></label>
+            <label>Stock actual<input name="stock" type="number" min="0" max="99999" step="1" defaultValue={editing?.stock ?? 0} required /></label>
+            <label>Precio original<input name="price" type="number" min="0" max="999999999" step="100" defaultValue={editing?.price ?? ""} required placeholder="0" /></label>
+            <label>Precio rebajado <small>Opcional y menor al original</small><input name="sale_price" type="number" min="0" max="999999999" step="100" defaultValue={editing?.sale_price ?? ""} placeholder="Déjalo vacío si no aplica" /></label>
+            <label className="span-2">Descripción <small>Opcional</small><textarea name="description" rows={5} defaultValue={editing?.description || ""} maxLength={2000} placeholder="Materiales, detalles, inspiración o forma de uso" /></label>
+            <label className="span-2 upload-field"><ImagePlus size={23} /><span>{editing ? "Añadir imágenes a la galería" : "Sube una o varias imágenes"}</span><small>JPG, PNG o WebP · máximo 8 MB cada una</small><input name="images" type="file" accept="image/jpeg,image/png,image/webp" multiple /></label>
+            <div className="checkbox-row span-2"><label><input name="active" type="checkbox" defaultChecked={editing?.active ?? true} /> Visible en la tienda</label><label><input name="featured" type="checkbox" defaultChecked={editing?.featured ?? false} /> Destacar en inicio</label></div>
+          </div>
+          <div className="admin-form-actions"><Link href="/admin/productos">Cancelar</Link><button className="admin-primary" type="submit">Guardar producto</button></div>
+        </form>
+        {editing && <form action={deleteProduct} className="danger-zone">
+          <div><strong>Eliminar este producto</strong><small>Se quitará del catálogo y se conservará el nombre en solicitudes históricas.</small></div>
+          <input type="hidden" name="id" value={editing.id} />
+          <input type="hidden" name="confirmation" value={editing.name} />
+          <ConfirmSubmitButton message={`¿Eliminar definitivamente “${editing.name}”? Esta acción no se puede deshacer.`} label="Eliminar producto" />
+        </form>}
+      </section>
+
+      {editing && <aside className="product-editor-side">
+        <section className="admin-panel product-gallery-admin">
+          <div className="panel-heading"><div><p className="admin-kicker">Galería</p><h2>Orden visual</h2></div></div>
+          {orderedImages.length ? <div className="gallery-admin-grid">{orderedImages.map((image, index) => <div key={image.id} className={index === 0 ? "cover" : ""}>
+            <Image src={image.url} alt={image.alt || editing.name} fill sizes="160px" />
+            {index === 0 && <span><Star /> Principal</span>}
+            <div>
+              {index !== 0 && <form action={makeProductImageCover}><input type="hidden" name="image_id" value={image.id} /><button type="submit" aria-label="Usar como imagen principal"><Star /></button></form>}
+              <form action={deleteProductImage}><input type="hidden" name="image_id" value={image.id} /><button type="submit" aria-label="Eliminar imagen"><Trash2 /></button></form>
+            </div>
+          </div>)}</div> : <div className="admin-empty compact"><ImagePlus /><p>Sin imágenes</p></div>}
+        </section>
+        <section className="admin-panel movement-panel">
+          <div className="panel-heading"><div><p className="admin-kicker">Trazabilidad</p><h2>Inventario reciente</h2></div></div>
+          {productMovements.length ? <div className="movement-list">{productMovements.map((movement) => <div key={movement.id}><strong className={movement.delta > 0 ? "positive" : "negative"}>{movement.delta > 0 ? "+" : ""}{movement.delta}</strong><span>{movement.reason}</span><small>Saldo {movement.balance_after} · {new Intl.DateTimeFormat("es-CO", { dateStyle: "medium", timeZone: "America/Bogota" }).format(new Date(movement.created_at))}</small></div>)}</div> : <p className="empty-inline">No hay movimientos auditados todavía.</p>}
+        </section>
+      </aside>}
+    </div> : <>
+      <form className="catalog-filterbar" method="get">
+        <label><Search /><input name="q" defaultValue={params.q} placeholder="Buscar producto" maxLength={80} /></label>
+        <select name="category" defaultValue={params.category || ""}><option value="">Todas las categorías</option>{categories.map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}</select>
+        <select name="stock" defaultValue={params.stock || ""}><option value="">Todo el inventario</option><option value="low">Stock bajo y agotado</option><option value="out">Solo agotados</option><option value="healthy">Stock saludable</option></select>
+        <button type="submit">Aplicar filtros</button>{(params.q || params.stock || params.category) && <Link href="/admin/productos">Limpiar</Link>}
+      </form>
+      <section className="admin-panel table-panel">{filtered.length ? <div className="admin-table-wrap"><table className="admin-table product-control-table">
+        <thead><tr><th>Producto</th><th>Precio</th><th>Inventario</th><th>Estado</th><th>Ajuste rápido</th><th /></tr></thead>
+        <tbody>{filtered.map((product) => <tr key={product.id}>
+          <td><div className="table-product">{product.images?.[0] ? <Image src={product.images[0].url} width={48} height={56} alt="" /> : <span>Li</span>}<div><strong>{product.name}</strong><small>{product.category?.name || "Sin categoría"} · {product.featured ? "Destacado" : "Catálogo"}</small></div></div></td>
+          <td>{product.sale_price ? <><del>{formatCop(product.price)}</del><br /><strong>{formatCop(product.sale_price)}</strong></> : formatCop(product.price)}</td>
+          <td><span className={product.stock === 0 ? "stock-pill zero" : product.stock < 5 ? "stock-pill low" : "stock-pill"}>{product.stock}</span></td>
+          <td><span className={`publish-state ${product.active ? "active" : "hidden"}`}>{product.active ? "Publicado" : "Oculto"}</span></td>
+          <td><form action={adjustInventory} className="inventory-quick-form"><input type="hidden" name="id" value={product.id} /><input name="delta" type="number" min="-999" max="999" step="1" placeholder="+ / −" aria-label="Cantidad a ajustar" required /><input name="reason" minLength={2} maxLength={240} placeholder="Motivo" aria-label="Motivo del ajuste" required /><button type="submit" aria-label={`Ajustar stock de ${product.name}`}><PackageCheck /></button></form></td>
+          <td><Link href={`/admin/productos?edit=${product.id}`} aria-label={`Editar ${product.name}`}><Pencil size={17} /></Link></td>
+        </tr>)}</tbody>
+      </table></div> : <div className="admin-empty tall"><ImagePlus /><p>No hay productos en esta vista.</p><span>Prueba otros filtros o agrega una nueva pieza.</span><Link href="/admin/productos?new=1" className="admin-primary">Agregar producto</Link></div>}</section>
+    </>}
   </main>;
 }

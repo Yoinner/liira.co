@@ -7,9 +7,11 @@ import type { Category, Inquiry, Product } from "@/lib/types";
 async function withCategoryCovers(client: NonNullable<ReturnType<typeof getSupabaseAdmin>>, rows: Category[]) {
   return Promise.all(rows.map(async (category) => {
     const path = `categories/${category.slug}`;
-    const { data, error } = await client.storage.from("products").list(path, { limit: 1, search: "cover" });
-    if (error || !data?.some((file) => file.name === "cover")) return { ...category, image_url: null };
-    return { ...category, image_url: client.storage.from("products").getPublicUrl(`${path}/cover`).data.publicUrl };
+    const { data, error } = await client.storage.from("products").list(path, { limit: 10, search: "cover" });
+    const cover = data?.find((file) => file.name === "cover");
+    if (error || !cover) return { ...category, image_url: null };
+    const publicUrl = client.storage.from("products").getPublicUrl(`${path}/cover`).data.publicUrl;
+    return { ...category, image_url: `${publicUrl}?v=${encodeURIComponent(cover.updated_at || cover.created_at || "cover")}` };
   }));
 }
 

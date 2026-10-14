@@ -19,6 +19,6 @@ export default async function AdminLayout({ children }: { children: React.ReactN
       </div>
       <form action={logoutAction}><button><LogOut /> Cerrar sesión</button></form>
     </aside>
-    <div className="admin-main"><header className="admin-topbar"><div className="admin-live-status"><span className="status-dot" /><span><strong>{technical ? "Sistema operativo" : "Operación activa"}</strong><small>{today}</small></span></div><AdminTools /><Link href="/" target="_blank" className="admin-store-link"><Eye size={15} /> Ver tienda</Link></header>{children}</div>
+    <div className="admin-main"><header className="admin-topbar"><div className="admin-live-status"><span className="status-dot" /><span><strong>{technical ? "Sistema operativo" : "Operación activa"}</strong><small>{today}</small></span></div><AdminTools /><Link href="/" target="_blank" className="admin-store-link"><Eye size={15} /> Ver tienda</Link><form action={logoutAction} className="admin-mobile-logout"><button aria-label="Cerrar sesión"><LogOut size={16} /></button></form></header>{children}</div>
   </div>;
 }

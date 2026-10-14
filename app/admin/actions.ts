@@ -7,6 +7,7 @@ import { z } from "zod";
 import { clearAdminSession, requireAdmin } from "@/lib/auth/session";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
 import { customerUpdateSchema, inquiryUpdateSchema, normalizePhone, parseTags } from "@/lib/validation/crm";
+import { hasDependents, matchesDeletionConfirmation } from "@/lib/validation/deletion";
 
 function slugify(value: string) {
   return value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
@@ -46,8 +47,16 @@ export async function saveCategory(formData: FormData) {
   const name = String(formData.get("name") || "").trim();
   if (name.length < 2 || name.length > 80) throw new Error("El nombre debe tener entre 2 y 80 caracteres");
   const id = String(formData.get("id") || "");
+  const existing = id
+    ? await client.from("categories").select("name,slug").eq("id", id).maybeSingle()
+    : null;
+  if (id && (existing?.error || !existing?.data)) throw new Error("La categoría ya no está disponible");
   const sortOrder = Number(formData.get("sort_order") || 0);
   if (!Number.isInteger(sortOrder) || sortOrder < 0 || sortOrder > 10000) throw new Error("La posición no es válida");
+  const cover = formData.get("image");
+  if (cover instanceof File && cover.size > 0 && (!cover.type.startsWith("image/") || cover.size > 8 * 1024 * 1024)) {
+    throw new Error("La imagen debe ser JPG, PNG o WebP y pesar máximo 8 MB");
+  }
   const record = {
     name,
     slug: slugify(name),
@@ -57,19 +66,51 @@ export async function saveCategory(formData: FormData) {
   };
   const result = id ? await client.from("categories").update(record).eq("id", id) : await client.from("categories").insert(record);
   if (result.error) throw new Error("No se pudo guardar la categoría");
-  const cover = formData.get("image");
+  const previousCoverPath = existing?.data ? `categories/${existing.data.slug}/cover` : null;
+  const storagePath = `categories/${record.slug}/cover`;
   if (cover instanceof File && cover.size > 0) {
-    if (!cover.type.startsWith("image/") || cover.size > 8 * 1024 * 1024) {
-      throw new Error("La imagen debe ser JPG, PNG o WebP y pesar máximo 8 MB");
-    }
-    const storagePath = `categories/${record.slug}/cover`;
     const upload = await client.storage.from("products").upload(storagePath, await cover.arrayBuffer(), { contentType: cover.type, upsert: true });
     if (upload.error) throw new Error("No se pudo subir la imagen de la categoría");
+    if (previousCoverPath && previousCoverPath !== storagePath) await client.storage.from("products").remove([previousCoverPath]);
+  } else if (previousCoverPath && previousCoverPath !== storagePath) {
+    const previousFolder = previousCoverPath.slice(0, previousCoverPath.lastIndexOf("/"));
+    const previousFiles = await client.storage.from("products").list(previousFolder, { limit: 10, search: "cover" });
+    if (previousFiles.error) throw new Error("No se pudo verificar la portada actual");
+    if (previousFiles.data?.some((file) => file.name === "cover")) {
+      const moved = await client.storage.from("products").move(previousCoverPath, storagePath);
+      if (moved.error) throw new Error("No se pudo conservar la portada al cambiar el nombre");
+    }
   }
   await writeAudit(client, id ? "category_updated" : "category_created", "category", id || null, session.role, { name, sort_order: sortOrder });
   revalidatePath("/admin/categorias");
+  revalidatePath("/admin");
   revalidatePath("/catalogo");
   revalidatePath("/");
+}
+
+export async function deleteCategory(formData: FormData) {
+  const session = await requireAdmin("business");
+  const client = getSupabaseAdmin();
+  if (!client) throw new Error("Supabase no está disponible");
+  const id = z.string().uuid().parse(formData.get("id"));
+  const confirmation = z.string().trim().min(2).max(80).parse(formData.get("confirmation"));
+  const [category, productCount] = await Promise.all([
+    client.from("categories").select("name,slug").eq("id", id).maybeSingle(),
+    client.from("products").select("id", { count: "exact", head: true }).eq("category_id", id),
+  ]);
+  if (category.error || !category.data) throw new Error("La categoría ya no existe");
+  if (!matchesDeletionConfirmation(confirmation, category.data.name)) throw new Error("La confirmación no coincide con la categoría");
+  if (productCount.error) throw new Error("No se pudo validar si la categoría contiene productos");
+  if (hasDependents(productCount.count)) throw new Error("Mueve o elimina sus productos antes de borrar esta categoría");
+  const removed = await client.from("categories").delete().eq("id", id);
+  if (removed.error) throw new Error("No se pudo eliminar la categoría");
+  await client.storage.from("products").remove([`categories/${category.data.slug}/cover`]);
+  await writeAudit(client, "category_deleted", "category", id, session.role, { name: category.data.name });
+  revalidatePath("/");
+  revalidatePath("/catalogo");
+  revalidatePath("/admin");
+  revalidatePath("/admin/categorias");
+  redirect("/admin/categorias?deleted=1");
 }
 
 export async function saveProduct(formData: FormData) {
@@ -134,6 +175,28 @@ export async function saveProduct(formData: FormData) {
   revalidatePath("/catalogo");
   revalidatePath("/admin/productos");
   redirect("/admin/productos?saved=1");
+}
+
+export async function deleteProduct(formData: FormData) {
+  const session = await requireAdmin("business");
+  const client = getSupabaseAdmin();
+  if (!client) throw new Error("Supabase no está disponible");
+  const id = z.string().uuid().parse(formData.get("id"));
+  const confirmation = z.string().trim().min(2).max(160).parse(formData.get("confirmation"));
+  const product = await client.from("products").select("name,slug,images:product_images(storage_path)").eq("id", id).maybeSingle();
+  if (product.error || !product.data) throw new Error("El producto ya no existe");
+  if (!matchesDeletionConfirmation(confirmation, product.data.name)) throw new Error("La confirmación no coincide con el producto");
+  const removed = await client.from("products").delete().eq("id", id);
+  if (removed.error) throw new Error("No se pudo eliminar el producto");
+  const storagePaths = (product.data.images || []).map((image: { storage_path: string | null }) => image.storage_path).filter((path): path is string => Boolean(path));
+  if (storagePaths.length) await client.storage.from("products").remove(storagePaths);
+  await writeAudit(client, "product_deleted", "product", id, session.role, { name: product.data.name });
+  revalidatePath("/");
+  revalidatePath("/catalogo");
+  revalidatePath(`/producto/${product.data.slug}`);
+  revalidatePath("/admin");
+  revalidatePath("/admin/productos");
+  redirect("/admin/productos?deleted=1");
 }
 
 export async function updateInquiry(formData: FormData) {

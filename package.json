@@ -8,6 +8,7 @@
     "start": "next start",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
+    "test": "node --experimental-strip-types --test tests/*.mjs",
     "quality": "npm run typecheck && npm run lint && npm run build"
   },
   "dependencies": {

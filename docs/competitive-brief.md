@@ -47,3 +47,35 @@ Principios:
 Se evita: estética de ecommerce genérico, exceso de tarjetas idénticas, dorado ornamental sin función, animación continua, dark mode aplicado a toda la tienda y recursos que compitan con el producto.
 
 La interacción distintiva sigue siendo la solicitud contextual registrada antes de WhatsApp. Los pagos continúan fuera del alcance de esta revisión hasta autorización expresa.
+
+## Reconstrucción visual — octubre de 2026
+
+Se contrastaron tres direcciones antes de implementar:
+
+1. **Murano en órbita:** la luz y las facetas del vidrio construyen profundidad 2.5D alrededor de fotografía real. La vitrina se siente viva sin convertir el catálogo en un canvas pesado.
+2. **Gabinete devocional:** composición simétrica, nichos y marcos inspirados en relicarios contemporáneos. Potente para rosarios, pero demasiado estrecha para los cordones de moda.
+3. **Hilo cromático:** una línea continua conecta colecciones y personalización. Clara y ligera, aunque menos memorable en el primer impacto.
+
+Dirección elegida: **Murano en órbita**. Su firma es un hilo de cuentas de vidrio construido en CSS sobre una vitrina fotográfica real. El movimiento comunica refracción y composición artesanal; no es un adorno genérico. En móvil conserva el objeto con menos cuentas y, con movimiento reducido, queda completamente estático.
+
+Reglas del sistema:
+
+- verbos de marca: refractar, componer, acompañar;
+- profundidad: capas 2.5D, nunca texto esencial dentro de canvas;
+- movimiento: táctil, lento y secundario a la compra;
+- imagen: luz natural cálida, cultivos consistentes y una fotografía por momento editorial;
+- prueba: producto, stock, precio, personalización y operación real junto a la imagen que los respalda.
+
+Se descartaron WebGL, Spline y una dependencia de animación para esta versión: la escena no necesita rotación libre ni simulación material y la solución HTML/CSS ofrece mejor carga, mantenimiento y accesibilidad.
+
+## Revisión del 14 de octubre de 2026
+
+La dirección **Murano en órbita** fue rechazada explícitamente por sentirse genérica y por no justificar su promesa de profundidad. Se retira como dirección aprobada.
+
+Tres nuevas tesis estructurales:
+
+1. **Hilo vivo — seleccionada:** una mesa de luz interactiva muestra tres denarios reales; color, reflejo e hilo responden para hacer tangible la personalización.
+2. **Gabinete de reliquias:** archivo táctil de piezas y significados, más contemplativo pero menos inmediato para la compra.
+3. **Espectro Murano:** refracción cromática y macrofotografía, visualmente potente pero con menor utilidad operativa.
+
+`Hilo vivo` gana porque convierte la primera pantalla en una exploración real de color con fotografías propias, conserva texto y acciones semánticas, funciona sin WebGL y tiene una expresión móvil completa. El patrón reutilizable que se conserva no es esta composición: es validar contraste y singularidad en navegador antes de llamar “premium” a una dirección.

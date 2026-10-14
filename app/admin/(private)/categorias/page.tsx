@@ -1,10 +1,11 @@
 import Image from "next/image";
 import { ImagePlus, Pencil } from "lucide-react";
-import { saveCategory } from "@/app/admin/actions";
+import { deleteCategory, saveCategory } from "@/app/admin/actions";
+import { ConfirmSubmitButton } from "@/components/admin/confirm-submit-button";
 import { getAdminData } from "@/lib/data/catalog";
 import { requireAdmin } from "@/lib/auth/session";
 
-export default async function CategoriesPage({ searchParams }: { searchParams: Promise<{ edit?: string }> }) {
+export default async function CategoriesPage({ searchParams }: { searchParams: Promise<{ edit?: string; deleted?: string }> }) {
   await requireAdmin("business");
   const params = await searchParams;
   const { categories } = await getAdminData();
@@ -13,6 +14,7 @@ export default async function CategoriesPage({ searchParams }: { searchParams: P
 
   return <main className="admin-content">
     <div className="admin-title"><div><p className="admin-kicker">Organización</p><h1>Categorías</h1></div></div>
+    {params.deleted && <div className="admin-success">Categoría eliminada. La vitrina pública ya quedó actualizada.</div>}
     <section className="category-admin-grid">
       <form action={saveCategory} className="admin-panel category-form">
         <div><p className="admin-kicker">{editing ? "Editar categoría" : "Nueva categoría"}</p><h2>{editing?.name || "Agrupa tus piezas"}</h2></div>
@@ -35,7 +37,14 @@ export default async function CategoriesPage({ searchParams }: { searchParams: P
           {category.image_url ? <span className="category-row-image"><Image src={category.image_url} alt="" fill sizes="46px" /></span> : <span>{String(category.sort_order).padStart(2, "0")}</span>}
           <div><strong>{category.name}</strong><small>{category.description || "Sin descripción"}</small><small>Posición {category.sort_order}</small></div>
           <em>{category.active ? "Visible" : "Oculta"}</em>
-          <a href={`/admin/categorias?edit=${category.id}`} aria-label={`Editar ${category.name}`}><Pencil size={16} /></a>
+          <div className="category-row-actions">
+            <a href={`/admin/categorias?edit=${category.id}`} aria-label={`Editar ${category.name}`}><Pencil size={16} /></a>
+            <form action={deleteCategory}>
+              <input type="hidden" name="id" value={category.id} />
+              <input type="hidden" name="confirmation" value={category.name} />
+              <ConfirmSubmitButton message={`¿Eliminar “${category.name}”? Solo se borrará si no contiene productos.`} label="" />
+            </form>
+          </div>
         </div>) : <div className="admin-empty"><p>No hay categorías todavía.</p></div>}
       </div>
     </section>

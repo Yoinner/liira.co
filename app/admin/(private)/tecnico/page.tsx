@@ -1,4 +1,4 @@
-import { Activity, CheckCircle2, Cloud, Database, HardDrive, LockKeyhole, MessageCircle, TriangleAlert, UsersRound } from "lucide-react";
+import { Activity, CheckCircle2, Cloud, Database, HardDrive, LockKeyhole, MessageCircle, ShieldCheck, TriangleAlert, UsersRound } from "lucide-react";
 import { getSystemHealth, type HealthState } from "@/lib/data/system-health";
 import { requireAdmin } from "@/lib/auth/session";
 
@@ -16,6 +16,8 @@ export default async function TechnicalPage() {
   const health = await getSystemHealth();
   return <main className="admin-content tech-page">
     <div className="admin-title"><div><p className="admin-kicker">Mission Control</p><h1>Estado técnico</h1><p className="tech-intro">Salud real del sitio y sus integraciones, sin exponer credenciales.</p></div></div>
+
+    <section className="tech-access-banner"><ShieldCheck /><div><strong>Superadministrador verificado</strong><p>Este rol puede operar todo el CRM y, además, revisar plataforma, seguridad, proveedores y trazabilidad técnica.</p></div><span>Acceso total</span></section>
 
     <section className="tech-service-grid">
       {health.services.map((service, index) => {
