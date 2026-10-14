@@ -18,6 +18,8 @@ export async function getSystemHealth() {
 
   const storageReady = !storageResult.error && Boolean(storageResult.data?.some((bucket) => bucket.id === "products"));
   const isVercel = Boolean(process.env.VERCEL);
+  const whatsappWebhookReady = Boolean(process.env.WHATSAPP_VERIFY_TOKEN && process.env.META_APP_SECRET);
+  const whatsappMessagingReady = Boolean(process.env.WHATSAPP_ACCESS_TOKEN && process.env.WHATSAPP_PHONE_NUMBER_ID && process.env.WHATSAPP_BUSINESS_ACCOUNT_ID);
 
   return {
     checkedAt: new Date().toISOString(),
@@ -55,8 +57,8 @@ export async function getSystemHealth() {
       },
       {
         name: "WhatsApp Cloud API",
-        state: (process.env.WHATSAPP_ACCESS_TOKEN && process.env.WHATSAPP_PHONE_NUMBER_ID ? "configured" : "unavailable") as HealthState,
-        detail: process.env.WHATSAPP_ACCESS_TOKEN && process.env.WHATSAPP_PHONE_NUMBER_ID ? "Credenciales presentes; falta prueba operativa" : "Pendiente hasta adquirir y configurar el número oficial",
+        state: (whatsappWebhookReady && whatsappMessagingReady ? "configured" : whatsappWebhookReady ? "degraded" : "unavailable") as HealthState,
+        detail: whatsappWebhookReady && whatsappMessagingReady ? "Webhook y credenciales presentes; falta prueba operativa" : whatsappWebhookReady ? "Webhook preparado; faltan credenciales del número" : "Webhook y credenciales pendientes",
       },
     ],
     security: [

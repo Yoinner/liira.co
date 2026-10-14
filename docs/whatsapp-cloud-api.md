@@ -20,6 +20,7 @@ No envíes el token en un documento, captura o commit. Lo más seguro es añadir
 - `WHATSAPP_PHONE_NUMBER_ID`: identificador del número, no el número visible.
 - `WHATSAPP_BUSINESS_ACCOUNT_ID`: identificador de la WABA.
 - `WHATSAPP_VERIFY_TOKEN`: frase aleatoria larga creada para verificar el webhook.
+- `META_APP_SECRET`: secreto de la app usado exclusivamente en el servidor para verificar `X-Hub-Signature-256`.
 - Número visible de Liira en formato E.164, actualmente configurado mediante `NEXT_PUBLIC_WHATSAPP_NUMBER`.
 
 ## Lo que se conectará en la web
@@ -32,6 +33,8 @@ No envíes el token en un documento, captura o commit. Lo más seguro es añadir
 6. Vincular las conversaciones al cliente por teléfono normalizado y mostrarlas en su ficha 360°.
 7. Enviar plantillas aprobadas fuera de la ventana de atención permitida y mensajes libres solo cuando Meta lo permita.
 8. Registrar consentimiento, plantilla, identificador externo, intentos y error sanitizado.
+
+El endpoint ya preparado rechaza firmas inválidas, limita el cuerpo a 1 MB, evita duplicados por identificador del mensaje y registra cada mensaje entrante en la línea de tiempo del cliente. La recepción de producción permanece cerrada hasta configurar `META_APP_SECRET` y publicar la app en Meta.
 
 ## Prueba antes de producción
 

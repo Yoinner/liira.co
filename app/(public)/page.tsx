@@ -20,7 +20,7 @@ const fallbackCategories = [
 export default async function HomePage() {
   const { products, categories } = await getCatalog();
   const featured = products.filter((product) => product.featured).slice(0, 4);
-  const inspirations = (categories.length ? categories : fallbackCategories).slice(0, 3).map((category) => {
+  const inspirations = (categories.length ? categories : fallbackCategories).slice(0, 4).map((category) => {
     const fallback = categoryFallbacks[category.slug] || categoryFallbacks["cordones-murano"];
     return {
       src: category.image_url || fallback.src,
@@ -57,16 +57,16 @@ export default async function HomePage() {
       </section>
 
       <section className="editorial-section container">
-        <p className="section-number" aria-hidden="true">01 / Tres formas de sentir Liira</p>
+        <p className="section-number" aria-hidden="true">01 / Formas de sentir Liira</p>
         <div className="section-heading split-heading">
           <div><p className="eyebrow">Colecciones con significado</p><h2>Encuentra la pieza<br />que se siente <em>tuya.</em></h2></div>
           <p>Cada colección tiene una energía distinta: presencia, fe o compañía. Entra por lo que buscas y personaliza después los colores.</p>
         </div>
-        <div className="inspiration-grid">
+        <div className={`inspiration-grid count-${inspirations.length}`}>
           {inspirations.map((item, index) => (
             <Link href={`/catalogo?categoria=${item.slug}`} className={`inspiration-card card-${index + 1}`} key={item.slug}>
-              <Image src={item.src} alt={`${item.title} hechos a mano por Liira`} fill sizes="(max-width: 700px) 90vw, 33vw" />
-              <div className="inspiration-overlay"><span>0{index + 1}</span><div><p>{item.copy}</p><h3>{item.title}</h3></div><ArrowRight size={20} /></div>
+              <Image src={item.src} alt={`${item.title} hechos a mano por Liira`} fill sizes={inspirations.length === 4 ? "(max-width: 900px) 100vw, (max-width: 1100px) 50vw, 25vw" : "(max-width: 900px) 100vw, 33vw"} />
+              <div className="inspiration-overlay"><span>{String(index + 1).padStart(2, "0")}</span><div><p>{item.copy}</p><h3>{item.title}</h3></div><ArrowRight size={20} /></div>
             </Link>
           ))}
         </div>
