@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getAdminSession } from "@/lib/auth/session";
 import { siteConfig } from "@/lib/config";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
+import { normalizePhone } from "@/lib/validation/crm";
 
 export async function GET(request: NextRequest, context: { params: Promise<{ id: string }> }) {
   const session = await getAdminSession();
@@ -11,7 +12,8 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
   if (!client) return NextResponse.redirect(new URL("/admin/solicitudes?error=provider", request.url));
   const { data: inquiry } = await client.from("inquiries").select("id,customer_id,customer_name,customer_phone,product_name,pipeline_stage").eq("id", id).maybeSingle();
   if (!inquiry) return NextResponse.redirect(new URL("/admin/solicitudes?error=missing", request.url));
-  const phone = String(inquiry.customer_phone || siteConfig.whatsapp).replace(/\D/g, "");
+  const phone = normalizePhone(String(inquiry.customer_phone || siteConfig.whatsapp));
+  if (!/^57\d{10}$/.test(phone)) return NextResponse.redirect(new URL("/admin/solicitudes?error=phone", request.url));
   const nextStage = inquiry.pipeline_stage === "nuevo" ? "contactado" : inquiry.pipeline_stage;
   const now = new Date().toISOString();
   await Promise.all([
