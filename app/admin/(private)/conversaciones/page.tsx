@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { Bot, MessageCircleMore, UserRound } from "lucide-react";
+import { LiveConversationRefresh } from "@/components/admin/live-conversation-refresh";
 import { requireAdmin } from "@/lib/auth/session";
 import { getWhatsAppInbox } from "@/lib/data/crm";
 
@@ -9,7 +10,7 @@ export default async function ConversationsPage() {
   await requireAdmin("business");
   const { conversations, available } = await getWhatsAppInbox();
   return <main className="admin-content whatsapp-inbox-page">
-    <div className="admin-title"><div><p className="admin-kicker">WhatsApp conectado</p><h1>Conversaciones vivas.</h1><p className="admin-lead">Mensajes recibidos, prioridad comercial y siguiente acción en una sola bandeja.</p></div></div>
+    <div className="admin-title whatsapp-title"><div><p className="admin-kicker">WhatsApp Business conectado</p><h1>Conversaciones vivas.</h1><p className="admin-lead">Mensajes recibidos, prioridad comercial y siguiente acción en una sola bandeja.</p></div><LiveConversationRefresh /></div>
     {!available && <div className="admin-unavailable">La bandeja quedará disponible al aplicar la migración de WhatsApp.</div>}
     <section className="whatsapp-queue">{conversations.length ? conversations.map((item) => <Link className="admin-panel whatsapp-thread-card" href={`/admin/conversaciones/${item.id}`} key={item.id}>
       <span className="whatsapp-avatar"><UserRound/></span><div><div className="whatsapp-thread-title"><strong>{item.customer?.name || item.normalized_phone}</strong>{item.unread_count > 0 && <b>{item.unread_count}</b>}</div><p>{item.ai_summary || "La conversación está lista para revisión."}</p><small>{item.ai_intent ? `Intención: ${item.ai_intent}` : "Clasificación pendiente"} · {new Intl.DateTimeFormat("es-CO", { dateStyle: "medium", timeStyle: "short", timeZone: "America/Bogota" }).format(new Date(item.last_message_at))}</small></div><span className={`conversation-state state-${item.status}`}>{labels[item.status]}</span>
