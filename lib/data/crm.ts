@@ -2,7 +2,7 @@ import "server-only";
 
 import { cache } from "react";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
-import type { Customer, CustomerActivity, CustomerNote, Inquiry, InventoryMovement, Product } from "@/lib/types";
+import type { Customer, CustomerActivity, CustomerNote, Inquiry, InventoryMovement, Product, WhatsAppConversation, WhatsAppMessage } from "@/lib/types";
 
 export type CrmData = {
   customers: Customer[];
@@ -76,3 +76,21 @@ export async function searchAdminRecords(query: string) {
     products: (products.data || []) as Product[],
   };
 }
+
+export const getWhatsAppInbox = cache(async () => {
+  const client = getSupabaseAdmin();
+  if (!client) return { conversations: [] as WhatsAppConversation[], available: false };
+  const result = await client.from("whatsapp_conversations").select("*, customer:customers(id,name,phone)").order("last_message_at", { ascending: false }).limit(200);
+  return { conversations: (result.data || []) as WhatsAppConversation[], available: !result.error };
+});
+
+export const getWhatsAppConversation = cache(async (id: string) => {
+  const client = getSupabaseAdmin();
+  if (!client) return null;
+  const [conversation, messages] = await Promise.all([
+    client.from("whatsapp_conversations").select("*, customer:customers(id,name,phone)").eq("id", id).maybeSingle(),
+    client.from("whatsapp_messages").select("*").eq("conversation_id", id).order("created_at", { ascending: true }).limit(300),
+  ]);
+  if (conversation.error || !conversation.data || messages.error) return null;
+  return { conversation: conversation.data as WhatsAppConversation, messages: (messages.data || []) as WhatsAppMessage[] };
+});

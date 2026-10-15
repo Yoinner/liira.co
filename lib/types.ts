@@ -107,3 +107,34 @@ export type InventoryMovement = {
   actor_role: "business" | "technical";
   created_at: string;
 };
+
+export type WhatsAppConversation = {
+  id: string;
+  customer_id: string;
+  normalized_phone: string;
+  status: "requiere_respuesta" | "esperando_cliente" | "cotizando" | "cerrada_ganada" | "cerrada_perdida";
+  unread_count: number;
+  last_message_at: string;
+  last_inbound_at: string | null;
+  last_outbound_at: string | null;
+  ai_summary: string | null;
+  ai_intent: string | null;
+  ai_sentiment: string | null;
+  ai_next_action: string | null;
+  ai_confidence: number | null;
+  ai_analyzed_at: string | null;
+  customer?: Pick<Customer, "id" | "name" | "phone"> | null;
+};
+
+export type WhatsAppMessage = {
+  id: string;
+  conversation_id: string;
+  customer_id: string;
+  provider_message_id: string;
+  direction: "inbound" | "outbound";
+  message_type: string;
+  body: string | null;
+  delivery_status: string;
+  provider_timestamp: string | null;
+  created_at: string;
+};

@@ -1,6 +1,8 @@
 import { timingSafeEqual } from "node:crypto";
+import { after } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
-import { extractInboundMessages, verifyMetaSignature, type WhatsAppInboundMessage } from "@/lib/whatsapp/webhook";
+import { analyzeWhatsAppConversation } from "@/lib/whatsapp/classify";
+import { extractInboundMessages, extractMessageStatuses, verifyMetaSignature, type WhatsAppInboundMessage } from "@/lib/whatsapp/webhook";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -16,9 +18,9 @@ async function persistInboundMessage(message: WhatsAppInboundMessage) {
   const client = getSupabaseAdmin();
   if (!client) throw new Error("database_unavailable");
 
-  const duplicate = await client.from("customer_activities").select("id").contains("metadata", { provider_message_id: message.messageId }).limit(1);
+  const duplicate = await client.from("whatsapp_messages").select("conversation_id").eq("provider_message_id", message.messageId).maybeSingle();
   if (duplicate.error) throw new Error("idempotency_check_failed");
-  if (duplicate.data?.length) return;
+  if (duplicate.data) return duplicate.data.conversation_id as string;
 
   const now = new Date().toISOString();
   const existing = await client.from("customers").select("id").eq("normalized_phone", message.phone).maybeSingle();
@@ -45,6 +47,28 @@ async function persistInboundMessage(message: WhatsAppInboundMessage) {
   }
 
   const summary = message.text ? `WhatsApp: ${message.text}` : `Mensaje de WhatsApp (${message.messageType})`;
+  const conversation = await client.from("whatsapp_conversations").upsert({
+    customer_id: customerId,
+    normalized_phone: message.phone,
+    status: "requiere_respuesta",
+    last_message_at: now,
+    last_inbound_at: now,
+    updated_at: now,
+  }, { onConflict: "normalized_phone" }).select("id,unread_count").single();
+  if (conversation.error || !conversation.data) throw new Error("conversation_upsert_failed");
+  const unread = await client.rpc("increment_whatsapp_unread", { conversation: conversation.data.id });
+  if (unread.error) throw new Error("conversation_counter_failed");
+  const stored = await client.from("whatsapp_messages").insert({
+    conversation_id: conversation.data.id,
+    customer_id: customerId,
+    provider_message_id: message.messageId,
+    direction: "inbound",
+    message_type: message.messageType,
+    body: message.text,
+    provider_timestamp: message.providerTimestamp ? new Date(Number(message.providerTimestamp) * 1000).toISOString() : null,
+    metadata: { phone_number_id: message.phoneNumberId },
+  });
+  if (stored.error) throw new Error("message_persist_failed");
   const inserted = await client.from("customer_activities").insert({
     customer_id: customerId,
     activity_type: "whatsapp_inbound",
@@ -56,7 +80,8 @@ async function persistInboundMessage(message: WhatsAppInboundMessage) {
       provider_timestamp: message.providerTimestamp,
     },
   });
-  if (inserted.error) throw new Error("message_persist_failed");
+  if (inserted.error) throw new Error("activity_persist_failed");
+  return conversation.data.id as string;
 }
 
 export async function GET(request: Request) {
@@ -92,7 +117,16 @@ export async function POST(request: Request) {
   }
 
   try {
-    for (const message of extractInboundMessages(payload)) await persistInboundMessage(message);
+    const conversationIds = new Set<string>();
+    for (const message of extractInboundMessages(payload)) conversationIds.add(await persistInboundMessage(message));
+    const client = getSupabaseAdmin();
+    for (const status of extractMessageStatuses(payload)) {
+      if (!client) throw new Error("database_unavailable");
+      const updated = await client.from("whatsapp_messages").update({ delivery_status: status.status }).eq("provider_message_id", status.messageId);
+      if (updated.error) throw new Error("status_update_failed");
+    }
+    const oidcToken = request.headers.get("x-vercel-oidc-token");
+    after(async () => Promise.all([...conversationIds].map((id) => analyzeWhatsAppConversation(id, oidcToken))));
   } catch {
     return new Response("Procesamiento temporalmente no disponible", { status: 503 });
   }

@@ -2,11 +2,12 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { BarChart3, Boxes, ChartNoAxesCombined, FolderTree, Gauge, MessageSquareText, Search, UsersRound } from "lucide-react";
+import { BarChart3, Boxes, ChartNoAxesCombined, FolderTree, Gauge, MessageCircleMore, MessageSquareText, Search, UsersRound } from "lucide-react";
 
 const items = [
   { href: "/admin", label: "Resumen", icon: ChartNoAxesCombined, exact: true },
   { href: "/admin/solicitudes", label: "Pipeline", icon: MessageSquareText },
+  { href: "/admin/conversaciones", label: "WhatsApp", icon: MessageCircleMore },
   { href: "/admin/clientes", label: "Clientes", icon: UsersRound },
   { href: "/admin/productos", label: "Productos", icon: Boxes },
   { href: "/admin/categorias", label: "Categorías", icon: FolderTree },

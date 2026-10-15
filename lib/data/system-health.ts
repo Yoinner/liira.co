@@ -58,7 +58,7 @@ export async function getSystemHealth() {
       {
         name: "WhatsApp Cloud API",
         state: (whatsappWebhookReady && whatsappMessagingReady ? "configured" : whatsappWebhookReady ? "degraded" : "unavailable") as HealthState,
-        detail: whatsappWebhookReady && whatsappMessagingReady ? "Webhook y credenciales presentes; falta prueba operativa" : whatsappWebhookReady ? "Webhook preparado; faltan credenciales del número" : "Webhook y credenciales pendientes",
+        detail: whatsappWebhookReady && whatsappMessagingReady ? "Webhook firmado y credenciales de producción presentes" : whatsappWebhookReady ? "Webhook preparado; faltan credenciales del número" : "Webhook y credenciales pendientes",
       },
     ],
     security: [

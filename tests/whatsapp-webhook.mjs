@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { createHmac } from "node:crypto";
 import test from "node:test";
-import { extractInboundMessages, verifyMetaSignature } from "../lib/whatsapp/webhook.ts";
+import { extractInboundMessages, extractMessageStatuses, verifyMetaSignature } from "../lib/whatsapp/webhook.ts";
 
 test("valida la firma de Meta sin aceptar firmas alteradas", () => {
   const body = JSON.stringify({ object: "whatsapp_business_account" });
@@ -10,6 +10,14 @@ test("valida la firma de Meta sin aceptar firmas alteradas", () => {
   assert.equal(verifyMetaSignature(body, signature, secret), true);
   assert.equal(verifyMetaSignature(`${body}x`, signature, secret), false);
   assert.equal(verifyMetaSignature(body, null, secret), false);
+});
+
+test("extrae estados de entrega conocidos y descarta estados inválidos", () => {
+  const statuses = extractMessageStatuses({ entry: [{ changes: [{ field: "messages", value: { statuses: [
+    { id: "wamid.1", status: "delivered", timestamp: "1792010100" },
+    { id: "wamid.2", status: "inventado" },
+  ] } }] }] });
+  assert.deepEqual(statuses, [{ messageId: "wamid.1", status: "delivered", providerTimestamp: "1792010100" }]);
 });
 
 test("extrae únicamente mensajes entrantes válidos y normalizados", () => {

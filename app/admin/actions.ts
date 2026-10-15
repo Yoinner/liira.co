@@ -283,6 +283,52 @@ export async function addCustomerNote(formData: FormData) {
   revalidatePath(`/admin/clientes/${customerId}`);
 }
 
+export async function updateWhatsAppConversation(formData: FormData) {
+  const session = await requireAdmin("business");
+  const client = getSupabaseAdmin();
+  if (!client) throw new Error("Supabase no está disponible");
+  const parsed = z.object({
+    id: z.string().uuid(),
+    status: z.enum(["requiere_respuesta", "esperando_cliente", "cotizando", "cerrada_ganada", "cerrada_perdida"]),
+  }).parse({ id: formData.get("id"), status: formData.get("status") });
+  const updated = await client.from("whatsapp_conversations").update({ status: parsed.status, unread_count: 0, updated_at: new Date().toISOString() }).eq("id", parsed.id);
+  if (updated.error) throw new Error("No se pudo actualizar la conversación");
+  await writeAudit(client, "whatsapp_conversation_updated", "whatsapp_conversation", parsed.id, session.role, { status: parsed.status });
+  revalidatePath("/admin/conversaciones");
+  revalidatePath(`/admin/conversaciones/${parsed.id}`);
+}
+
+export async function sendWhatsAppMessage(formData: FormData) {
+  const session = await requireAdmin("business");
+  const client = getSupabaseAdmin();
+  if (!client) throw new Error("Supabase no está disponible");
+  const parsed = z.object({ id: z.string().uuid(), body: z.string().trim().min(1).max(2000) }).parse({ id: formData.get("id"), body: formData.get("body") });
+  const conversation = await client.from("whatsapp_conversations").select("id,customer_id,normalized_phone,last_inbound_at").eq("id", parsed.id).maybeSingle();
+  if (conversation.error || !conversation.data) throw new Error("La conversación ya no está disponible");
+  const inboundAt = conversation.data.last_inbound_at ? new Date(conversation.data.last_inbound_at).getTime() : 0;
+  if (!inboundAt || Date.now() - inboundAt > 24 * 60 * 60 * 1000) throw new Error("La ventana de atención terminó; usa una plantilla aprobada por Meta");
+  const accessToken = process.env.WHATSAPP_ACCESS_TOKEN;
+  const phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID;
+  if (!accessToken || !phoneNumberId) throw new Error("WhatsApp Cloud API no está configurado");
+  const response = await fetch(`https://graph.facebook.com/${process.env.META_GRAPH_API_VERSION || "v26.0"}/${phoneNumberId}/messages`, {
+    method: "POST",
+    headers: { authorization: `Bearer ${accessToken}`, "content-type": "application/json" },
+    body: JSON.stringify({ messaging_product: "whatsapp", recipient_type: "individual", to: conversation.data.normalized_phone, type: "text", text: { preview_url: false, body: parsed.body } }),
+  });
+  const payload = await response.json() as { messages?: Array<{ id?: string }> };
+  const providerMessageId = payload.messages?.[0]?.id;
+  if (!response.ok || !providerMessageId) throw new Error("Meta no aceptó el mensaje");
+  const now = new Date().toISOString();
+  const stored = await client.from("whatsapp_messages").insert({ conversation_id: parsed.id, customer_id: conversation.data.customer_id, provider_message_id: providerMessageId, direction: "outbound", message_type: "text", body: parsed.body, delivery_status: "accepted" });
+  if (stored.error) throw new Error("El mensaje fue aceptado por Meta, pero no se pudo registrar");
+  await client.from("whatsapp_conversations").update({ status: "esperando_cliente", unread_count: 0, last_message_at: now, last_outbound_at: now, updated_at: now }).eq("id", parsed.id);
+  await client.from("customer_activities").insert({ customer_id: conversation.data.customer_id, activity_type: "whatsapp_outbound", summary: `Liira: ${parsed.body}`.slice(0, 300), actor_role: session.role, metadata: { provider_message_id: providerMessageId } });
+  await writeAudit(client, "whatsapp_message_sent", "whatsapp_conversation", parsed.id, session.role, { provider_message_id: providerMessageId });
+  revalidatePath("/admin/conversaciones");
+  revalidatePath(`/admin/conversaciones/${parsed.id}`);
+  revalidatePath(`/admin/clientes/${conversation.data.customer_id}`);
+}
+
 export async function adjustInventory(formData: FormData) {
   const session = await requireAdmin("business");
   const client = getSupabaseAdmin();

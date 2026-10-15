@@ -12,6 +12,12 @@ export type WhatsAppInboundMessage = {
   text: string | null;
 };
 
+export type WhatsAppMessageStatus = {
+  messageId: string;
+  status: string;
+  providerTimestamp: string | null;
+};
+
 function record(value: unknown): JsonRecord | null {
   return value !== null && typeof value === "object" && !Array.isArray(value) ? value as JsonRecord : null;
 }
@@ -78,5 +84,27 @@ export function extractInboundMessages(payload: unknown): WhatsAppInboundMessage
     }
   }
 
+  return result;
+}
+
+export function extractMessageStatuses(payload: unknown): WhatsAppMessageStatus[] {
+  const root = record(payload);
+  const entries = Array.isArray(root?.entry) ? root.entry : [];
+  const result: WhatsAppMessageStatus[] = [];
+  for (const entryValue of entries) {
+    const entry = record(entryValue);
+    const changes = Array.isArray(entry?.changes) ? entry.changes : [];
+    for (const changeValue of changes) {
+      const change = record(changeValue);
+      if (text(change?.field) !== "messages") continue;
+      const statuses = Array.isArray(record(change?.value)?.statuses) ? record(change?.value)?.statuses as unknown[] : [];
+      for (const statusValue of statuses) {
+        const status = record(statusValue);
+        const messageId = text(status?.id);
+        const state = text(status?.status);
+        if (messageId && ["sent", "delivered", "read", "failed", "deleted"].includes(state)) result.push({ messageId, status: state, providerTimestamp: text(status?.timestamp) || null });
+      }
+    }
+  }
   return result;
 }

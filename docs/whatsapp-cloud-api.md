@@ -45,3 +45,27 @@ El endpoint ya preparado rechaza firmas inválidas, limita el cuerpo a 1 MB, evi
 - Repetir con el número real y un contacto controlado antes de habilitar automatizaciones.
 
 Referencias oficiales: colección de Meta para WhatsApp Cloud API en Postman, Meta Blueprint y las políticas de WhatsApp Business. Verificar versión vigente de Graph API y requisitos del número el día de la conexión.
+# WhatsApp Cloud API en Liira
+
+## Estado operativo
+
+- Webhook firmado: `/api/webhooks/whatsapp`.
+- Suscripción requerida: `messages`.
+- Los mensajes entrantes crean o actualizan el cliente, la conversación y su línea de tiempo.
+- La bandeja está en `/admin/conversaciones`; Tech ve además el estado del proveedor.
+- El análisis con IA está desactivado hasta autorizar proveedor, tratamiento de conversaciones y presupuesto. Al activarlo usa `WHATSAPP_AI_ANALYSIS_ENABLED=true` y Vercel AI Gateway mediante OIDC.
+
+## Configuración rápida de un nuevo cliente
+
+1. Crear o seleccionar el Business Portfolio y la app de Meta.
+2. Agregar WhatsApp, registrar el número de producción y verificarlo por SMS o llamada.
+3. Generar un token permanente de usuario del sistema con los permisos mínimos de WhatsApp.
+4. Configurar en Producción: `WHATSAPP_ACCESS_TOKEN`, `WHATSAPP_PHONE_NUMBER_ID`, `WHATSAPP_BUSINESS_ACCOUNT_ID`, `WHATSAPP_VERIFY_TOKEN` y `META_APP_SECRET`.
+5. Configurar el callback HTTPS, verificarlo y suscribir `messages`.
+6. Completar dominio, contacto, privacidad, términos, eliminación de datos, ícono y categoría; publicar la app solo con autorización.
+7. Aplicar la migración de la bandeja, desplegar una vez y probar recepción, idempotencia, firma inválida y visualización en Admin.
+8. Probar un envío únicamente con autorización y dentro de la ventana de atención; fuera de ella se requiere una plantilla aprobada.
+
+## Teléfono y coexistencia
+
+No asumir que un número de Cloud API puede abrirse simultáneamente en WhatsApp Business. La coexistencia depende de que Meta ofrezca el flujo oficial para esa cuenta y debe elegirse durante el alta correspondiente. Confirmar elegibilidad vigente antes de registrar o migrar el número; nunca automatizar WhatsApp Web.
