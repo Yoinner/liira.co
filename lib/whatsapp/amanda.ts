@@ -4,6 +4,7 @@ import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
 import { normalizePhone } from "@/lib/validation/crm";
+import { amandaGreetingFallback } from "@/lib/whatsapp/amanda-copy";
 import { downloadMetaMedia, sendMetaText } from "@/lib/whatsapp/meta";
 
 const operatorPhone = () => normalizePhone(process.env.AMANDA_OPERATOR_PHONE || "3016399833");
@@ -41,10 +42,14 @@ async function gatewayJson<T>(schema: z.ZodSchema<T>, system: string, user: stri
       }),
       signal: AbortSignal.timeout(12_000),
     });
-    if (!response.ok) return null;
+    if (!response.ok) {
+      console.warn("amanda_ai_gateway_failed", { status: response.status });
+      return null;
+    }
     const payload = await response.json() as { choices?: Array<{ message?: { content?: string } }> };
     return schema.parse(JSON.parse(payload.choices?.[0]?.message?.content || "{}"));
-  } catch {
+  } catch (error) {
+    console.warn("amanda_ai_gateway_failed", { reason: error instanceof Error ? error.name : "unknown" });
     return null;
   }
 }
@@ -177,7 +182,15 @@ export async function runAmandaForInbound(conversationId: string, sourceMessageI
     const transcript = context.messages.map((item) => `${item.direction === "inbound" ? "Cliente" : "Liira"}: ${item.body || `[${item.message_type}]`}`).join("\n");
     const decision = await gatewayJson(decisionSchema, amandaSystem, JSON.stringify({ cliente: context.conversation.customer, etapa: context.conversation.agent_stage, catalogo: context.products, aprendizajes_revisables: context.learning, conversacion: transcript }), oidcToken);
     if (!decision) {
-      await createHandoff(client, context.conversation, sourceMessageId, "general", "Amanda no pudo generar una respuesta segura. Revisa la conversación y recomienda qué contestar.");
+      const customer = context.conversation.customer as { name?: string } | null;
+      const fallback = amandaGreetingFallback(source.body, customer?.name, Boolean(context.conversation.agent_intro_sent_at));
+      if (fallback) {
+        const now = new Date().toISOString();
+        await storeOutbound(client, context.conversation, fallback, "amanda");
+        await client.from("whatsapp_conversations").update({ status: "esperando_cliente", agent_intro_sent_at: context.conversation.agent_intro_sent_at || now, updated_at: now }).eq("id", conversationId);
+      } else {
+        await createHandoff(client, context.conversation, sourceMessageId, "general", "Amanda no pudo generar una respuesta segura. Revisa la conversación y recomienda qué contestar.");
+      }
     } else if (decision.action === "handoff") {
       if (decision.reply) await storeOutbound(client, context.conversation, decision.reply, "amanda");
       await createHandoff(client, context.conversation, sourceMessageId, decision.handoff_kind || "general", decision.operator_question || "Revisa la conversación y recomienda la mejor respuesta.");
