@@ -1,4 +1,14 @@
-# Plan del agente comercial autónomo de Liira
+# Amanda · operación comercial autónoma de Liira
+
+## Contrato operativo implementado
+
+- Amanda responde desde el número oficial de Liira cuando `AMANDA_ENABLED=true` y la conversación está en modo `autonomous`.
+- Daniela opera el canal privado `573016399833`. Para abrir la ventana oficial debe escribir al número de Liira al menos una vez cada 24 horas; una plantilla aprobada será necesaria para alertas iniciadas fuera de esa ventana.
+- Las consultas humanas llevan código `LIR-XXXXXX`. Daniela responde con ese código y su recomendación; Amanda la transforma en una respuesta coherente para la clienta sin inventar información.
+- Imágenes y videos entrantes se descargan desde Meta, se guardan en un bucket privado y se sirven únicamente al panel autenticado. Toda pieza visual genera intervención humana.
+- Cuando la clienta está lista para comprar, Amanda solicita el enlace a Daniela. Una captura nunca confirma el pago: únicamente la respuesta explícita `pago confirmado` de Daniela habilita la recolección de nombre, dirección, barrio y ciudad.
+- Los seguimientos se guardan en base de datos y Supabase Cron consulta cada minuto los vencidos. Solo se envía un microseguimiento si la última intervención fue de Liira y la ventana de servicio sigue abierta.
+- La eliminación de mensajes y conversaciones es local y auditable; no borra el contenido del dispositivo del cliente.
 
 ## Objetivo
 
@@ -98,6 +108,6 @@ El paso entre fases exige un conjunto de evaluación aprobado y al menos dos sem
 - Métricas: tiempo a primera respuesta, conversación a cotización, cotización a venta, recuperación de “luego”, transferencias correctas, correcciones humanas, bloqueos de política, costo por conversación y satisfacción.
 - Comparar contra la operación humana mediante pruebas A/B controladas; optimizar venta y satisfacción, nunca solo cantidad de mensajes.
 
-## Primer entregable recomendado
+## Activación responsable
 
-Construir **modo sombra + copiloto** sobre la bandeja actual: borrador sugerido, fuentes usadas, confianza, botón aprobar/editar, pausa automática al intervenir una persona y panel de evaluación. Es el menor paso que produce aprendizaje real sin poner la reputación de Liira en manos de un agente aún no probado.
+El código soporta autonomía controlada, atención humana y pausa por conversación. La salida a producción debe empezar con conversaciones reales supervisadas y conservar `AMANDA_ENABLED=false` hasta que la migración, el canal privado de Daniela, los medios, los permisos y los casos de prueba estén verificados. Las recomendaciones de Daniela se guardan como candidatos de aprendizaje; no reescriben silenciosamente las reglas del agente.

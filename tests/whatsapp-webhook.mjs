@@ -37,5 +37,22 @@ test("extrae únicamente mensajes entrantes válidos y normalizados", () => {
     phoneNumberId: "12345",
     providerTimestamp: "1792010000",
     text: "Hola Liira",
+    mediaId: null,
+    mediaCaption: null,
   }]);
+});
+
+test("extrae imágenes y videos con su identificador y pie", () => {
+  const messages = extractInboundMessages({ entry: [{ changes: [{ field: "messages", value: {
+    metadata: { phone_number_id: "12345" },
+    contacts: [{ wa_id: "573015550101", profile: { name: "Laura" } }],
+    messages: [
+      { from: "573015550101", id: "wamid.image", type: "image", image: { id: "media_123456", caption: "Referencia rosada" } },
+      { from: "573015550101", id: "wamid.video", type: "video", video: { id: "media_654321" } },
+    ],
+  } }] }] });
+  assert.deepEqual(messages.map(({ messageType, mediaId, mediaCaption }) => ({ messageType, mediaId, mediaCaption })), [
+    { messageType: "image", mediaId: "media_123456", mediaCaption: "Referencia rosada" },
+    { messageType: "video", mediaId: "media_654321", mediaCaption: null },
+  ]);
 });

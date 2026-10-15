@@ -10,6 +10,8 @@ export type WhatsAppInboundMessage = {
   phoneNumberId: string;
   providerTimestamp: string | null;
   text: string | null;
+  mediaId: string | null;
+  mediaCaption: string | null;
 };
 
 export type WhatsAppMessageStatus = {
@@ -36,6 +38,16 @@ function messageText(message: JsonRecord) {
   const interactive = record(message.interactive);
   const reply = record(interactive?.button_reply) || record(interactive?.list_reply);
   return text(reply?.title) || null;
+}
+
+function messageMedia(message: JsonRecord) {
+  const type = text(message.type);
+  if (type !== "image" && type !== "video") return { id: null, caption: null };
+  const media = record(message[type]);
+  return {
+    id: text(media?.id) || null,
+    caption: text(media?.caption).slice(0, 500) || null,
+  };
 }
 
 export function verifyMetaSignature(rawBody: string, signature: string | null, appSecret: string) {
@@ -70,6 +82,7 @@ export function extractInboundMessages(payload: unknown): WhatsAppInboundMessage
         if (!/^\d{7,15}$/.test(phone) || !messageId) continue;
         const contact = contacts.find((item) => text(item.wa_id).replace(/\D/g, "") === phone) || contacts[0];
         const contactName = text(record(contact?.profile)?.name) || "Contacto de WhatsApp";
+        const media = messageMedia(message);
 
         result.push({
           contactName: contactName.slice(0, 100),
@@ -79,6 +92,8 @@ export function extractInboundMessages(payload: unknown): WhatsAppInboundMessage
           phoneNumberId: text(metadata?.phone_number_id),
           providerTimestamp: text(message.timestamp) || null,
           text: messageText(message)?.slice(0, 240) || null,
+          mediaId: media.id,
+          mediaCaption: media.caption,
         });
       }
     }

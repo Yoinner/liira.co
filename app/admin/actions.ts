@@ -321,12 +321,52 @@ export async function sendWhatsAppMessage(formData: FormData) {
   const now = new Date().toISOString();
   const stored = await client.from("whatsapp_messages").insert({ conversation_id: parsed.id, customer_id: conversation.data.customer_id, provider_message_id: providerMessageId, direction: "outbound", message_type: "text", body: parsed.body, delivery_status: "accepted" });
   if (stored.error) throw new Error("El mensaje fue aceptado por Meta, pero no se pudo registrar");
-  await client.from("whatsapp_conversations").update({ status: "esperando_cliente", unread_count: 0, last_message_at: now, last_outbound_at: now, updated_at: now }).eq("id", parsed.id);
+  await client.from("whatsapp_conversations").update({ status: "esperando_cliente", automation_mode: "human", agent_follow_up_at: null, unread_count: 0, last_message_at: now, last_outbound_at: now, updated_at: now }).eq("id", parsed.id);
   await client.from("customer_activities").insert({ customer_id: conversation.data.customer_id, activity_type: "whatsapp_outbound", summary: `Liira: ${parsed.body}`.slice(0, 300), actor_role: session.role, metadata: { provider_message_id: providerMessageId } });
   await writeAudit(client, "whatsapp_message_sent", "whatsapp_conversation", parsed.id, session.role, { provider_message_id: providerMessageId });
   revalidatePath("/admin/conversaciones");
   revalidatePath(`/admin/conversaciones/${parsed.id}`);
   revalidatePath(`/admin/clientes/${conversation.data.customer_id}`);
+}
+
+export async function updateAmandaMode(formData: FormData) {
+  const session = await requireAdmin("business");
+  const client = getSupabaseAdmin();
+  if (!client) throw new Error("Supabase no está disponible");
+  const parsed = z.object({ id: z.string().uuid(), mode: z.enum(["autonomous", "paused", "human"]) }).parse({ id: formData.get("id"), mode: formData.get("mode") });
+  const changes: { automation_mode: typeof parsed.mode; updated_at: string; agent_follow_up_at?: null } = { automation_mode: parsed.mode, updated_at: new Date().toISOString() };
+  if (parsed.mode !== "autonomous") changes.agent_follow_up_at = null;
+  const result = await client.from("whatsapp_conversations").update(changes).eq("id", parsed.id);
+  if (result.error) throw new Error("No se pudo cambiar el modo de Amanda");
+  await writeAudit(client, "amanda_mode_updated", "whatsapp_conversation", parsed.id, session.role, { mode: parsed.mode });
+  revalidatePath("/admin/conversaciones");
+  revalidatePath(`/admin/conversaciones/${parsed.id}`);
+}
+
+export async function deleteWhatsAppMessage(formData: FormData) {
+  const session = await requireAdmin("business");
+  const client = getSupabaseAdmin();
+  if (!client) throw new Error("Supabase no está disponible");
+  const id = z.string().uuid().parse(formData.get("id"));
+  const message = await client.from("whatsapp_messages").select("conversation_id,media_path,deleted_at").eq("id", id).maybeSingle();
+  if (message.error || !message.data || message.data.deleted_at) throw new Error("El mensaje ya no está disponible");
+  if (message.data.media_path) await client.storage.from("whatsapp-media").remove([message.data.media_path]);
+  const result = await client.from("whatsapp_messages").update({ body: null, media_id: null, media_path: null, media_caption: null, deleted_at: new Date().toISOString(), deleted_by_role: session.role }).eq("id", id);
+  if (result.error) throw new Error("No se pudo eliminar el mensaje del panel");
+  await writeAudit(client, "whatsapp_message_deleted", "whatsapp_message", id, session.role, { conversation_id: message.data.conversation_id });
+  revalidatePath(`/admin/conversaciones/${message.data.conversation_id}`);
+}
+
+export async function deleteWhatsAppConversation(formData: FormData) {
+  const session = await requireAdmin("business");
+  const client = getSupabaseAdmin();
+  if (!client) throw new Error("Supabase no está disponible");
+  const id = z.string().uuid().parse(formData.get("id"));
+  const result = await client.from("whatsapp_conversations").update({ deleted_at: new Date().toISOString(), deleted_by_role: session.role, automation_mode: "paused", agent_follow_up_at: null }).eq("id", id).is("deleted_at", null).select("id").maybeSingle();
+  if (result.error || !result.data) throw new Error("La conversación ya no está disponible");
+  await writeAudit(client, "whatsapp_conversation_deleted", "whatsapp_conversation", id, session.role);
+  revalidatePath("/admin/conversaciones");
+  redirect("/admin/conversaciones");
 }
 
 export async function adjustInventory(formData: FormData) {

@@ -123,6 +123,10 @@ export type WhatsAppConversation = {
   ai_next_action: string | null;
   ai_confidence: number | null;
   ai_analyzed_at: string | null;
+  automation_mode: "autonomous" | "paused" | "human";
+  agent_stage: string;
+  agent_follow_up_at: string | null;
+  deleted_at: string | null;
   customer?: Pick<Customer, "id" | "name" | "phone"> | null;
 };
 
@@ -134,7 +138,26 @@ export type WhatsAppMessage = {
   direction: "inbound" | "outbound";
   message_type: string;
   body: string | null;
+  media_id: string | null;
+  media_path: string | null;
+  media_mime_type: string | null;
+  media_caption: string | null;
+  deleted_at: string | null;
   delivery_status: string;
   provider_timestamp: string | null;
   created_at: string;
+};
+
+export type AmandaHandoff = {
+  id: string;
+  code: string;
+  conversation_id: string;
+  customer_id: string;
+  kind: "general" | "media_review" | "payment_link" | "payment_verification" | "shipping_quote";
+  status: "pending" | "resolved" | "cancelled";
+  question: string;
+  operator_guidance: string | null;
+  operator_delivery_status: string;
+  created_at: string;
+  resolved_at: string | null;
 };

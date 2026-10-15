@@ -2,6 +2,7 @@ import { timingSafeEqual } from "node:crypto";
 import { after } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
 import { analyzeWhatsAppConversation } from "@/lib/whatsapp/classify";
+import { handleAmandaOperatorInbound, isAmandaOperator, persistWhatsAppMedia, runAmandaForInbound } from "@/lib/whatsapp/amanda";
 import { extractInboundMessages, extractMessageStatuses, verifyMetaSignature, type WhatsAppInboundMessage } from "@/lib/whatsapp/webhook";
 
 export const dynamic = "force-dynamic";
@@ -20,7 +21,7 @@ async function persistInboundMessage(message: WhatsAppInboundMessage) {
 
   const duplicate = await client.from("whatsapp_messages").select("conversation_id").eq("provider_message_id", message.messageId).maybeSingle();
   if (duplicate.error) throw new Error("idempotency_check_failed");
-  if (duplicate.data) return duplicate.data.conversation_id as string;
+  if (duplicate.data) return null;
 
   const now = new Date().toISOString();
   const existing = await client.from("customers").select("id").eq("normalized_phone", message.phone).maybeSingle();
@@ -53,6 +54,8 @@ async function persistInboundMessage(message: WhatsAppInboundMessage) {
     status: "requiere_respuesta",
     last_message_at: now,
     last_inbound_at: now,
+    agent_follow_up_at: null,
+    agent_follow_up_source_message_id: null,
     updated_at: now,
   }, { onConflict: "normalized_phone" }).select("id,unread_count").single();
   if (conversation.error || !conversation.data) throw new Error("conversation_upsert_failed");
@@ -65,10 +68,12 @@ async function persistInboundMessage(message: WhatsAppInboundMessage) {
     direction: "inbound",
     message_type: message.messageType,
     body: message.text,
+    media_id: message.mediaId,
+    media_caption: message.mediaCaption,
     provider_timestamp: message.providerTimestamp ? new Date(Number(message.providerTimestamp) * 1000).toISOString() : null,
     metadata: { phone_number_id: message.phoneNumberId },
-  });
-  if (stored.error) throw new Error("message_persist_failed");
+  }).select("id").single();
+  if (stored.error || !stored.data) throw new Error("message_persist_failed");
   const inserted = await client.from("customer_activities").insert({
     customer_id: customerId,
     activity_type: "whatsapp_inbound",
@@ -81,7 +86,7 @@ async function persistInboundMessage(message: WhatsAppInboundMessage) {
     },
   });
   if (inserted.error) throw new Error("activity_persist_failed");
-  return conversation.data.id as string;
+  return { conversationId: conversation.data.id as string, messageId: stored.data.id as string };
 }
 
 export async function GET(request: Request) {
@@ -117,8 +122,15 @@ export async function POST(request: Request) {
   }
 
   try {
-    const conversationIds = new Set<string>();
-    for (const message of extractInboundMessages(payload)) conversationIds.add(await persistInboundMessage(message));
+    const customerMessages: Array<{ conversationId: string; messageId: string }> = [];
+    const operatorMessages: WhatsAppInboundMessage[] = [];
+    for (const message of extractInboundMessages(payload)) {
+      if (isAmandaOperator(message.phone)) operatorMessages.push(message);
+      else {
+        const stored = await persistInboundMessage(message);
+        if (stored) customerMessages.push(stored);
+      }
+    }
     const client = getSupabaseAdmin();
     for (const status of extractMessageStatuses(payload)) {
       if (!client) throw new Error("database_unavailable");
@@ -126,7 +138,14 @@ export async function POST(request: Request) {
       if (updated.error) throw new Error("status_update_failed");
     }
     const oidcToken = request.headers.get("x-vercel-oidc-token");
-    after(async () => Promise.all([...conversationIds].map((id) => analyzeWhatsAppConversation(id, oidcToken))));
+    after(async () => {
+      for (const message of operatorMessages) await handleAmandaOperatorInbound(message, oidcToken);
+      for (const item of customerMessages) {
+        await persistWhatsAppMedia(item.messageId);
+        await analyzeWhatsAppConversation(item.conversationId, oidcToken);
+        await runAmandaForInbound(item.conversationId, item.messageId, oidcToken);
+      }
+    });
   } catch {
     return new Response("Procesamiento temporalmente no disponible", { status: 503 });
   }

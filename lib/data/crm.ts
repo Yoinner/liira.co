@@ -2,7 +2,7 @@ import "server-only";
 
 import { cache } from "react";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
-import type { Customer, CustomerActivity, CustomerNote, Inquiry, InventoryMovement, Product, WhatsAppConversation, WhatsAppMessage } from "@/lib/types";
+import type { AmandaHandoff, Customer, CustomerActivity, CustomerNote, Inquiry, InventoryMovement, Product, WhatsAppConversation, WhatsAppMessage } from "@/lib/types";
 
 export type CrmData = {
   customers: Customer[];
@@ -80,17 +80,18 @@ export async function searchAdminRecords(query: string) {
 export const getWhatsAppInbox = cache(async () => {
   const client = getSupabaseAdmin();
   if (!client) return { conversations: [] as WhatsAppConversation[], available: false };
-  const result = await client.from("whatsapp_conversations").select("*, customer:customers(id,name,phone)").order("last_message_at", { ascending: false }).limit(200);
+  const result = await client.from("whatsapp_conversations").select("*, customer:customers(id,name,phone)").is("deleted_at", null).order("last_message_at", { ascending: false }).limit(200);
   return { conversations: (result.data || []) as WhatsAppConversation[], available: !result.error };
 });
 
 export const getWhatsAppConversation = cache(async (id: string) => {
   const client = getSupabaseAdmin();
   if (!client) return null;
-  const [conversation, messages] = await Promise.all([
-    client.from("whatsapp_conversations").select("*, customer:customers(id,name,phone)").eq("id", id).maybeSingle(),
+  const [conversation, messages, handoffs] = await Promise.all([
+    client.from("whatsapp_conversations").select("*, customer:customers(id,name,phone)").eq("id", id).is("deleted_at", null).maybeSingle(),
     client.from("whatsapp_messages").select("*").eq("conversation_id", id).order("created_at", { ascending: true }).limit(300),
+    client.from("amanda_handoffs").select("*").eq("conversation_id", id).order("created_at", { ascending: false }).limit(30),
   ]);
   if (conversation.error || !conversation.data || messages.error) return null;
-  return { conversation: conversation.data as WhatsAppConversation, messages: (messages.data || []) as WhatsAppMessage[] };
+  return { conversation: conversation.data as WhatsAppConversation, messages: (messages.data || []) as WhatsAppMessage[], handoffs: (handoffs.data || []) as AmandaHandoff[] };
 });
