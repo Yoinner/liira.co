@@ -421,7 +421,8 @@
 .lost-reason { color: #8b3648; }
 .inquiry-workspace { display: grid; align-content: start; gap: 12px; padding-left: 24px; border-left: 1px solid var(--admin-line); }
 .quick-contact { display: flex; flex-wrap: wrap; gap: 8px; }
-.quick-contact a { min-height: 36px; display: inline-flex; align-items: center; gap: 7px; padding: 0 11px; border: 1px solid var(--admin-line); border-radius: 7px; color: var(--admin-wine); font-size: .53rem; font-weight: 700; }
+.quick-contact a, .contact-waiting { min-height: 36px; display: inline-flex; align-items: center; gap: 7px; padding: 0 11px; border: 1px solid var(--admin-line); border-radius: 7px; color: var(--admin-wine); font-size: .53rem; font-weight: 700; }
+.contact-waiting { color: var(--admin-muted); background: var(--admin-soft); }
 .quick-contact svg { width: 14px; }
 .follow-up-chip { width: max-content; max-width: 100%; display: flex; align-items: center; gap: 6px; padding: 7px 10px; border-radius: 7px; color: #73561e; background: #fff2d7; font-size: .5rem; font-weight: 700; }
 .follow-up-chip.overdue { color: #92384b; background: #fbe8ec; }

@@ -3,9 +3,10 @@ import { CalendarClock, Filter, MessageCircle, Search, SlidersHorizontal, UserRo
 import { updateInquiry } from "@/app/admin/actions";
 import { getServerNow, stageLabels } from "@/lib/admin/analytics";
 import { formatCop } from "@/lib/config";
-import { getCrmData } from "@/lib/data/crm";
+import { getCrmData, getWhatsAppInbox } from "@/lib/data/crm";
 import { requireAdmin } from "@/lib/auth/session";
 import type { PipelineStage } from "@/lib/types";
+import { normalizePhone } from "@/lib/validation/crm";
 
 type SearchParams = Promise<{ stage?: string; q?: string; view?: string; error?: string }>;
 
@@ -17,7 +18,9 @@ function localInput(value: string | null) {
 export default async function InquiriesPage({ searchParams }: { searchParams: SearchParams }) {
   await requireAdmin("business");
   const params = await searchParams;
-  const { inquiries, schemaReady } = await getCrmData();
+  const [{ inquiries, schemaReady }, { conversations }] = await Promise.all([getCrmData(), getWhatsAppInbox()]);
+  const conversationsByCustomer = new Map(conversations.map((item) => [item.customer_id, item]));
+  const conversationsByPhone = new Map(conversations.map((item) => [item.normalized_phone, item]));
   const now = getServerNow();
   const activeStage = Object.hasOwn(stageLabels, params.stage || "") ? params.stage as PipelineStage : null;
   const query = (params.q || "").trim().toLowerCase();
@@ -42,9 +45,10 @@ export default async function InquiriesPage({ searchParams }: { searchParams: Se
     <section className="crm-inquiry-list">{filtered.length ? filtered.map((item) => {
       const stage = item.pipeline_stage || (item.status === "vendido" ? "ganado" : item.status === "no_vendido" ? "perdido" : "nuevo");
       const overdue = Boolean(item.next_follow_up_at && new Date(item.next_follow_up_at).getTime() <= now && item.status === "contacto");
+      const conversation = (item.customer_id && conversationsByCustomer.get(item.customer_id)) || conversationsByPhone.get(normalizePhone(item.customer_phone || ""));
       return <article className={`admin-panel crm-inquiry-card priority-${item.priority || "normal"}`} key={item.id}>
         <div className="inquiry-summary"><div className="inquiry-avatar">{item.customer_name?.slice(0, 1).toUpperCase() || "L"}</div><div className="inquiry-copy"><div className="inquiry-title"><h2>{item.customer_name || "Contacto de WhatsApp"}</h2><span className={`stage-pill stage-${stage}`}>{stageLabels[stage]}</span>{item.priority === "alta" && <span className="priority-pill">Prioridad alta</span>}</div><p className="inquiry-product">{item.product_name}</p><div className="inquiry-meta"><span>{item.customer_phone || "Sin teléfono"}</span><span>{item.source === "whatsapp_web" ? "Web → WhatsApp" : item.source}</span><time>{new Intl.DateTimeFormat("es-CO", { dateStyle: "medium", timeStyle: "short", timeZone: "America/Bogota" }).format(new Date(item.created_at))}</time></div>{item.color_preference && <p><strong>Color:</strong> {item.color_preference}</p>}{item.customization && <p><strong>Pedido:</strong> {item.customization}</p>}{item.lost_reason && <p className="lost-reason"><strong>Motivo de pérdida:</strong> {item.lost_reason}</p>}{item.sale_amount && <strong className="sale-confirmed">Venta confirmada · {formatCop(item.sale_amount)}</strong>}</div></div>
-        <div className="inquiry-workspace"><div className="quick-contact">{item.customer_phone && <Link href={`/admin/solicitudes/${item.id}/whatsapp`} target="_blank"><MessageCircle/> Abrir WhatsApp y registrar contacto</Link>}{item.customer_id && <Link href={`/admin/clientes/${item.customer_id}`}><UserRound/> Ver cliente 360°</Link>}</div>{item.next_follow_up_at && <div className={`follow-up-chip ${overdue ? "overdue" : ""}`}><CalendarClock/>{overdue ? "Vencido · " : "Próximo · "}{new Intl.DateTimeFormat("es-CO", { dateStyle: "medium", timeStyle: "short", timeZone: "America/Bogota" }).format(new Date(item.next_follow_up_at))}</div>}
+        <div className="inquiry-workspace"><div className="quick-contact">{conversation ? <Link href={`/admin/conversaciones/${conversation.id}`}><MessageCircle/> Abrir chat de Liira</Link> : item.customer_phone && <span className="contact-waiting"><MessageCircle/> Esperando el primer mensaje del cliente</span>}{item.customer_id && <Link href={`/admin/clientes/${item.customer_id}`}><UserRound/> Ver cliente 360°</Link>}</div>{item.next_follow_up_at && <div className={`follow-up-chip ${overdue ? "overdue" : ""}`}><CalendarClock/>{overdue ? "Vencido · " : "Próximo · "}{new Intl.DateTimeFormat("es-CO", { dateStyle: "medium", timeStyle: "short", timeZone: "America/Bogota" }).format(new Date(item.next_follow_up_at))}</div>}
           <form action={updateInquiry} className="pipeline-form"><input type="hidden" name="id" value={item.id}/><label>Etapa<select name="stage" defaultValue={stage}>{(Object.keys(stageLabels) as PipelineStage[]).map((value) => <option key={value} value={value}>{stageLabels[value]}</option>)}</select></label><label>Prioridad<select name="priority" defaultValue={item.priority || "normal"}><option value="baja">Baja</option><option value="normal">Normal</option><option value="alta">Alta</option></select></label><label>Próximo seguimiento<input name="next_follow_up_at" type="datetime-local" defaultValue={localInput(item.next_follow_up_at)}/></label><label>Valor vendido<input name="sale_amount" type="number" min="0" step="100" defaultValue={item.sale_amount ?? ""} placeholder="Solo al ganar"/></label><label className="span-2">Motivo si se pierde<input name="lost_reason" maxLength={300} defaultValue={item.lost_reason || ""} placeholder="Ej. presupuesto, sin respuesta, no disponible"/></label><button className="admin-primary span-2" type="submit">Guardar avance</button></form>
         </div>
       </article>;
