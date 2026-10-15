@@ -4,7 +4,7 @@ import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
 import { normalizePhone } from "@/lib/validation/crm";
-import { amandaGreetingFallback } from "@/lib/whatsapp/amanda-copy";
+import { amandaSafeFallback } from "@/lib/whatsapp/amanda-copy";
 import { downloadMetaMedia, sendMetaText } from "@/lib/whatsapp/meta";
 
 const operatorPhone = () => normalizePhone(process.env.AMANDA_OPERATOR_PHONE || "3016399833");
@@ -183,7 +183,7 @@ export async function runAmandaForInbound(conversationId: string, sourceMessageI
     const decision = await gatewayJson(decisionSchema, amandaSystem, JSON.stringify({ cliente: context.conversation.customer, etapa: context.conversation.agent_stage, catalogo: context.products, aprendizajes_revisables: context.learning, conversacion: transcript }), oidcToken);
     if (!decision) {
       const customer = context.conversation.customer as { name?: string } | null;
-      const fallback = amandaGreetingFallback(source.body, customer?.name, Boolean(context.conversation.agent_intro_sent_at));
+      const fallback = amandaSafeFallback(source.body, customer?.name, Boolean(context.conversation.agent_intro_sent_at));
       if (fallback) {
         const now = new Date().toISOString();
         await storeOutbound(client, context.conversation, fallback, "amanda");

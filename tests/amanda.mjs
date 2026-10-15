@@ -1,12 +1,13 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { amandaGreetingFallback } from "../lib/whatsapp/amanda-copy.ts";
+import { amandaSafeFallback } from "../lib/whatsapp/amanda-copy.ts";
 
 test("responde saludos simples aunque AI Gateway no esté disponible", () => {
-  assert.match(amandaGreetingFallback("buena", "Daniela García"), /Hola Daniela.*Soy Amanda.*disponible.*personalizado/s);
-  assert.match(amandaGreetingFallback("Buenas noches", "Daniela", true), /¡Hola, Daniela!.*disponible.*personalizado/s);
+  assert.match(amandaSafeFallback("buena", "Daniela García"), /Hola Daniela.*Soy Amanda.*disponible.*personalizado/s);
+  assert.match(amandaSafeFallback("ola", "Daniela", true), /¡Hola, Daniela!.*disponible.*personalizado/s);
 });
 
-test("no improvisa respuestas comerciales fuera de un saludo", () => {
-  assert.equal(amandaGreetingFallback("¿Cuánto cuesta el rosario?", "Daniela"), null);
+test("pide contexto sin inventar cuando falla la IA", () => {
+  assert.match(amandaSafeFallback("Quiero eso pero no sé", "Daniela"), /Quiero entenderte bien.*producto disponible.*personalizado.*pedido/s);
+  assert.equal(amandaSafeFallback("   ", "Daniela"), null);
 });
