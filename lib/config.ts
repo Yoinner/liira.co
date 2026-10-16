@@ -6,7 +6,7 @@ export const siteConfig = {
     "Maxicollares, denarios y rosarios de mano hechos con murano. Diseños personalizados desde Bucaramanga con envíos a toda Colombia.",
   location: "Bucaramanga, Colombia",
   instagram: "https://www.instagram.com/liira.co/",
-  whatsapp: process.env.NEXT_PUBLIC_WHATSAPP_NUMBER || "573174639218",
+  whatsapp: "573174639218",
   url:
     process.env.NEXT_PUBLIC_APP_URL ||
     (process.env.VERCEL_PROJECT_PRODUCTION_URL

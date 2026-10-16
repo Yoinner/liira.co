@@ -283,6 +283,47 @@ export async function addCustomerNote(formData: FormData) {
   revalidatePath(`/admin/clientes/${customerId}`);
 }
 
+export async function openWhatsAppConversation(formData: FormData) {
+  const session = await requireAdmin("business");
+  const client = getSupabaseAdmin();
+  if (!client) throw new Error("Supabase no está disponible");
+  const parsed = z.object({
+    phone: z.string().trim().min(10).max(30).transform(normalizePhone).refine((phone) => /^57[3]\d{9}$/.test(phone), "Ingresa un celular colombiano válido"),
+    name: z.string().trim().max(100).optional(),
+  }).parse({ phone: formData.get("phone"), name: formData.get("name") });
+
+  let customer = await client.from("customers").select("id,name").eq("normalized_phone", parsed.phone).maybeSingle();
+  if (customer.error) throw new Error("No se pudo verificar el contacto");
+  if (!customer.data) {
+    customer = await client.from("customers").insert({
+      normalized_phone: parsed.phone,
+      phone: `+${parsed.phone}`,
+      name: parsed.name || `Contacto ${parsed.phone.slice(-4)}`,
+      last_contact_at: new Date().toISOString(),
+    }).select("id,name").single();
+  } else if (parsed.name && customer.data.name !== parsed.name) {
+    const renamed = await client.from("customers").update({ name: parsed.name, updated_at: new Date().toISOString() }).eq("id", customer.data.id);
+    if (renamed.error) throw new Error("No se pudo actualizar el nombre del contacto");
+  }
+  if (customer.error || !customer.data) throw new Error("No se pudo crear el contacto");
+
+  const existing = await client.from("whatsapp_conversations").select("id").eq("normalized_phone", parsed.phone).maybeSingle();
+  if (existing.error) throw new Error("No se pudo verificar la conversación");
+  let conversationId = existing.data?.id as string | undefined;
+  if (conversationId) {
+    const reopened = await client.from("whatsapp_conversations").update({ deleted_at: null, deleted_by_role: null, updated_at: new Date().toISOString() }).eq("id", conversationId);
+    if (reopened.error) throw new Error("No se pudo abrir la conversación");
+  } else {
+    const created = await client.from("whatsapp_conversations").insert({ customer_id: customer.data.id, normalized_phone: parsed.phone }).select("id").single();
+    if (created.error || !created.data) throw new Error("No se pudo crear la conversación");
+    conversationId = created.data.id;
+  }
+  if (!conversationId) throw new Error("No se pudo abrir la conversación");
+  await writeAudit(client, "whatsapp_conversation_opened", "whatsapp_conversation", conversationId, session.role, { normalized_phone: parsed.phone });
+  revalidatePath("/admin/conversaciones");
+  redirect(`/admin/conversaciones/${conversationId}`);
+}
+
 export async function updateWhatsAppConversation(formData: FormData) {
   const session = await requireAdmin("business");
   const client = getSupabaseAdmin();

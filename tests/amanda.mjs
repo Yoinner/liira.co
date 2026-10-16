@@ -9,13 +9,14 @@ test("responde saludos simples aunque AI Gateway no esté disponible", () => {
 
 test("pide contexto sin inventar cuando falla la IA", () => {
   assert.match(amandaSafeFallback("Quiero eso pero no sé", "Daniela").reply, /Quiero entenderte bien.*producto disponible.*personalizado.*pedido/s);
-  assert.equal(amandaSafeFallback("La verdad", "Daniela", true).reply, "Entiendo 💛 Para ayudarte bien, ¿qué te gustaría saber o conseguir en este momento?");
+  assert.equal(amandaSafeFallback("La verdad", "Daniela", true).reply, "Entiendo. Para ayudarte bien, ¿qué te gustaría saber o conseguir en este momento?");
   assert.equal(amandaSafeFallback("   ", "Daniela"), null);
 });
 
 test("escala consultas de envío sin abandonar ni repetir al cliente", () => {
   const fallback = amandaSafeFallback("Quisiera ordenar una prenda, pero quiero saber del envío antes", "Yoinner", true);
-  assert.match(fallback.reply, /confirmar con Dani.*costo.*tiempo/s);
+  assert.match(fallback.reply, /persona encargada de los envíos.*costo.*tiempo/s);
+  assert.doesNotMatch(fallback.reply, /Dani|💛/);
   assert.match(fallback.handoffQuestion, /proceso de envío.*Indícame qué debo explicarle/s);
 });
 
