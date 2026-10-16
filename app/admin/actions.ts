@@ -343,6 +343,20 @@ export async function updateAmandaMode(formData: FormData) {
   revalidatePath(`/admin/conversaciones/${parsed.id}`);
 }
 
+export async function cancelAmandaHandoff(formData: FormData) {
+  const session = await requireAdmin("business");
+  const client = getSupabaseAdmin();
+  if (!client) throw new Error("Supabase no está disponible");
+  const parsed = z.object({ id: z.string().uuid(), conversationId: z.string().uuid() }).parse({ id: formData.get("id"), conversationId: formData.get("conversationId") });
+  const cancelled = await client.from("amanda_handoffs").update({ status: "cancelled", resolved_at: new Date().toISOString() }).eq("id", parsed.id).eq("conversation_id", parsed.conversationId).eq("status", "pending").select("id").maybeSingle();
+  if (cancelled.error || !cancelled.data) throw new Error("La alerta ya no está disponible");
+  const remaining = await client.from("amanda_handoffs").select("id", { count: "exact", head: true }).eq("conversation_id", parsed.conversationId).eq("status", "pending");
+  if (remaining.error) throw new Error("No se pudo comprobar el estado de Amanda");
+  if (!remaining.count) await client.from("whatsapp_conversations").update({ automation_mode: "autonomous", updated_at: new Date().toISOString() }).eq("id", parsed.conversationId);
+  await writeAudit(client, "amanda_handoff_cancelled", "amanda_handoff", parsed.id, session.role, { conversation_id: parsed.conversationId });
+  revalidatePath(`/admin/conversaciones/${parsed.conversationId}`);
+}
+
 export async function deleteWhatsAppMessage(formData: FormData) {
   const session = await requireAdmin("business");
   const client = getSupabaseAdmin();

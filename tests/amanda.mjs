@@ -18,3 +18,9 @@ test("escala consultas de envío sin abandonar ni repetir al cliente", () => {
   assert.match(fallback.reply, /confirmar con Dani.*costo.*tiempo/s);
   assert.match(fallback.handoffQuestion, /proceso de envío.*Indícame qué debo explicarle/s);
 });
+
+test("mantiene una conversación de compra útil durante una caída de IA", () => {
+  assert.match(amandaSafeFallback("Ajá y cómo haría para comprar una prenda", "Yoinner", true).reply, /compra la hacemos por este chat.*qué accesorio/s);
+  assert.match(amandaSafeFallback("Un denario", "Yoinner", true).reply, /Te ayudo con denario.*disponibles.*personalizarlo/s);
+  assert.match(amandaSafeFallback("Un denario o un collar", "Yoinner", true).reply, /denario o collar.*disponibles.*personalizarlo/s);
+});

@@ -24,7 +24,7 @@ const replySchema = z.object({ reply: z.string().trim().min(2).max(1200) });
 type Client = NonNullable<ReturnType<typeof getSupabaseAdmin>>;
 
 function aiToken(oidcToken?: string | null) {
-  return process.env.AI_GATEWAY_API_KEY || oidcToken || process.env.VERCEL_OIDC_TOKEN || null;
+  return oidcToken || process.env.VERCEL_OIDC_TOKEN || process.env.AI_GATEWAY_API_KEY || null;
 }
 
 async function gatewayJson<T>(schema: z.ZodSchema<T>, system: string, user: string, oidcToken?: string | null): Promise<T | null> {
@@ -99,13 +99,22 @@ async function notifyOperator(client: Client, handoff: { id: string; code: strin
 }
 
 async function createHandoff(client: Client, conversation: Record<string, unknown>, sourceMessageId: string, kind: string, question: string) {
+  const pending = await client.from("amanda_handoffs").select("id,code,kind,question,operator_delivery_status").eq("conversation_id", conversation.id).eq("kind", kind).eq("status", "pending").order("created_at", { ascending: false }).limit(1).maybeSingle();
+  if (pending.error) throw new Error("handoff_lookup_failed");
+  if (pending.data) {
+    if (pending.data.operator_delivery_status !== "sent") {
+      const customer = conversation.customer as { name?: string } | null;
+      await notifyOperator(client, pending.data, customer?.name || String(conversation.normalized_phone));
+    }
+    return pending.data;
+  }
   const id = randomUUID();
   const code = `LIR-${id.slice(0, 6).toUpperCase()}`;
   const result = await client.from("amanda_handoffs").insert({ id, code, conversation_id: conversation.id, customer_id: conversation.customer_id, source_message_id: sourceMessageId, kind, question }).select("id,code,kind,question").single();
   if (result.error || !result.data) throw new Error("handoff_create_failed");
   const customer = conversation.customer as { name?: string } | null;
   await notifyOperator(client, result.data, customer?.name || String(conversation.normalized_phone));
-  await client.from("whatsapp_conversations").update({ automation_mode: "human", agent_follow_up_at: null, updated_at: new Date().toISOString() }).eq("id", conversation.id);
+  await client.from("whatsapp_conversations").update({ agent_follow_up_at: null, updated_at: new Date().toISOString() }).eq("id", conversation.id);
   return result.data;
 }
 
@@ -226,6 +235,13 @@ export async function handleAmandaOperatorInbound(message: { messageId: string; 
   const stored = await client.from("amanda_operator_messages").insert({ provider_message_id: message.messageId, direction: "inbound", body: message.text, provider_timestamp: timestamp }).select("id").maybeSingle();
   if (stored.error || !stored.data || !message.text) return;
   const code = message.text.match(/LIR-[A-F0-9]{6}/i)?.[0]?.toUpperCase();
+  if (!code) {
+    const queued = await client.from("amanda_handoffs").select("id,code,kind,question,operator_delivery_status,conversation:whatsapp_conversations(customer:customers(name),normalized_phone)").eq("status", "pending").eq("operator_delivery_status", "queued").order("created_at", { ascending: true }).limit(10);
+    for (const item of queued.data || []) {
+      const conversation = item.conversation as unknown as { normalized_phone?: string; customer?: { name?: string } } | null;
+      await notifyOperator(client, item, conversation?.customer?.name || conversation?.normalized_phone || "Cliente");
+    }
+  }
   const pendingQuery = client.from("amanda_handoffs").select("*, conversation:whatsapp_conversations(*, customer:customers(name))").eq("status", "pending").order("created_at", { ascending: false });
   const handoffResult = code ? await pendingQuery.eq("code", code).limit(1).maybeSingle() : await pendingQuery.limit(2);
   const handoff = code ? handoffResult.data : Array.isArray(handoffResult.data) && handoffResult.data.length === 1 ? handoffResult.data[0] : null;

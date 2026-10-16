@@ -13,7 +13,7 @@ const classificationSchema = z.object({
 
 export async function analyzeWhatsAppConversation(conversationId: string, oidcToken: string | null) {
   if (process.env.WHATSAPP_AI_ANALYSIS_ENABLED !== "true") return;
-  const token = process.env.AI_GATEWAY_API_KEY || oidcToken;
+  const token = oidcToken || process.env.VERCEL_OIDC_TOKEN || process.env.AI_GATEWAY_API_KEY;
   const client = getSupabaseAdmin();
   if (!client || !token) return;
 
