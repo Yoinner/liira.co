@@ -20,6 +20,7 @@ export async function getSystemHealth() {
   const isVercel = Boolean(process.env.VERCEL);
   const whatsappWebhookReady = Boolean(process.env.WHATSAPP_VERIFY_TOKEN && process.env.META_APP_SECRET);
   const whatsappMessagingReady = Boolean(process.env.WHATSAPP_ACCESS_TOKEN && process.env.WHATSAPP_PHONE_NUMBER_ID && process.env.WHATSAPP_BUSINESS_ACCOUNT_ID);
+  const whatsappTemplateReady = Boolean(process.env.WHATSAPP_INIT_TEMPLATE_NAME && process.env.WHATSAPP_INIT_TEMPLATE_LANGUAGE);
 
   return {
     checkedAt: new Date().toISOString(),
@@ -57,8 +58,8 @@ export async function getSystemHealth() {
       },
       {
         name: "WhatsApp Cloud API",
-        state: (whatsappWebhookReady && whatsappMessagingReady ? "configured" : whatsappWebhookReady ? "degraded" : "unavailable") as HealthState,
-        detail: whatsappWebhookReady && whatsappMessagingReady ? "Webhook firmado y credenciales de producción presentes" : whatsappWebhookReady ? "Webhook preparado; faltan credenciales del número" : "Webhook y credenciales pendientes",
+        state: (whatsappWebhookReady && whatsappMessagingReady && whatsappTemplateReady ? "configured" : whatsappWebhookReady || whatsappMessagingReady ? "degraded" : "unavailable") as HealthState,
+        detail: whatsappWebhookReady && whatsappMessagingReady && whatsappTemplateReady ? "Webhook firmado, mensajería y plantilla de inicio configurados" : whatsappWebhookReady && whatsappMessagingReady ? "Mensajería activa; falta la plantilla aprobada para iniciar conversaciones" : whatsappWebhookReady ? "Webhook preparado; faltan credenciales del número" : "Webhook y credenciales pendientes",
       },
     ],
     security: [

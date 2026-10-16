@@ -87,11 +87,12 @@ export const getWhatsAppInbox = cache(async () => {
 export const getWhatsAppConversation = cache(async (id: string) => {
   const client = getSupabaseAdmin();
   if (!client) return null;
-  const [conversation, messages, handoffs] = await Promise.all([
+  const [conversation, messages, handoffs, templateSends] = await Promise.all([
     client.from("whatsapp_conversations").select("*, customer:customers(id,name,phone)").eq("id", id).is("deleted_at", null).maybeSingle(),
     client.from("whatsapp_messages").select("*").eq("conversation_id", id).order("created_at", { ascending: true }).limit(300),
     client.from("amanda_handoffs").select("*").eq("conversation_id", id).order("created_at", { ascending: false }).limit(30),
+    client.from("whatsapp_template_sends").select("status,template_name,topic,created_at").eq("conversation_id", id).in("status", ["pending", "accepted"]).gte("created_at", new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()).order("created_at", { ascending: false }).limit(1),
   ]);
   if (conversation.error || !conversation.data || messages.error) return null;
-  return { conversation: conversation.data as WhatsAppConversation, messages: (messages.data || []) as WhatsAppMessage[], handoffs: (handoffs.data || []) as AmandaHandoff[] };
+  return { conversation: conversation.data as WhatsAppConversation, messages: (messages.data || []) as WhatsAppMessage[], handoffs: (handoffs.data || []) as AmandaHandoff[], latestTemplateSend: templateSends.data?.[0] || null };
 });

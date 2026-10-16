@@ -657,6 +657,16 @@ html:has(.admin-shell), html:has(.admin-login-page) { font-size: 17px; }
 .reply-composer .admin-primary { background: var(--wa-deep); }
 .reply-composer textarea, .conversation-status-form select { width: 100%; padding: 12px; border: 1px solid var(--admin-line); border-radius: 10px; color: var(--admin-ink); background: var(--admin-panel); resize: vertical; }
 .reply-composer textarea:disabled { opacity: .7; cursor: not-allowed; }
+.template-composer { display: grid; grid-template-columns: minmax(220px,.75fr) minmax(240px,1fr) minmax(260px,1.1fr) auto; align-items: end; gap: 12px; padding: 16px; border-color: rgba(7,94,84,.2); }
+.template-composer > div { align-self: center; }
+.template-composer > div p { margin: 4px 0 0; color: var(--admin-muted); font-size: .52rem; line-height: 1.5; }
+.template-composer label { display: grid; gap: 6px; color: var(--admin-muted); font-size: .5rem; font-weight: 700; }
+.template-composer input[type="text"], .template-composer input:not([type]) { width: 100%; min-height: 42px; padding: 0 11px; border: 1px solid var(--admin-line); border-radius: 9px; color: var(--admin-ink); background: var(--admin-panel); }
+.template-consent { grid-template-columns: 18px 1fr !important; align-items: start; line-height: 1.45; }
+.template-consent input { margin-top: 2px; accent-color: var(--wa-deep); }
+.template-waiting { padding: 18px; border-color: rgba(7,94,84,.2); box-shadow: inset 4px 0 var(--wa-green); }
+.template-waiting p { margin: 6px 0; color: var(--admin-ink); font-size: .6rem; }
+.template-waiting span { color: var(--admin-muted); font-size: .52rem; }
 .conversation-status-form { display: grid; gap: 10px; padding: 18px; }
 .conversation-status-form label { display: grid; gap: 7px; color: var(--admin-muted); font-size: .5rem; }
 .conversation-status-form button { min-height: 40px; border: 0; border-radius: 9px; color: white; background: var(--admin-deep); font-weight: 800; cursor: pointer; }
@@ -665,11 +675,15 @@ html:has(.admin-shell), html:has(.admin-login-page) { font-size: 17px; }
   .whatsapp-new-conversation { grid-template-columns: 1fr 1fr; }
   .whatsapp-new-conversation > div { grid-column: 1 / -1; }
   .whatsapp-new-conversation > small { grid-column: 1 / -1; }
+  .template-composer { grid-template-columns: 1fr 1fr; }
+  .template-composer > div { grid-column: 1 / -1; }
 }
 
 @media (max-width: 620px) {
   .whatsapp-new-conversation { grid-template-columns: 1fr; }
   .whatsapp-new-conversation > div, .whatsapp-new-conversation > small { grid-column: auto; }
+  .template-composer { grid-template-columns: 1fr; }
+  .template-composer > div { grid-column: auto; }
 }
 
 html[data-admin-theme="dark"] .admin-shell { --admin-bg: #130d0f; --admin-panel: #1d1518; --admin-ink: #f6edef; --admin-muted: #bdaeb2; --admin-line: rgba(255,235,240,.11); --admin-wine: #e08ca0; --admin-deep: #fff3f5; background: var(--admin-bg); }

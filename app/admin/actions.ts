@@ -8,6 +8,7 @@ import { clearAdminSession, requireAdmin } from "@/lib/auth/session";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
 import { customerUpdateSchema, inquiryUpdateSchema, normalizePhone, parseTags } from "@/lib/validation/crm";
 import { hasDependents, matchesDeletionConfirmation } from "@/lib/validation/deletion";
+import { sendMetaContactTemplate } from "@/lib/whatsapp/meta";
 
 function slugify(value: string) {
   return value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
@@ -365,6 +366,82 @@ export async function sendWhatsAppMessage(formData: FormData) {
   await client.from("whatsapp_conversations").update({ status: "esperando_cliente", automation_mode: "human", agent_follow_up_at: null, unread_count: 0, last_message_at: now, last_outbound_at: now, updated_at: now }).eq("id", parsed.id);
   await client.from("customer_activities").insert({ customer_id: conversation.data.customer_id, activity_type: "whatsapp_outbound", summary: `Liira: ${parsed.body}`.slice(0, 300), actor_role: session.role, metadata: { provider_message_id: providerMessageId } });
   await writeAudit(client, "whatsapp_message_sent", "whatsapp_conversation", parsed.id, session.role, { provider_message_id: providerMessageId });
+  revalidatePath("/admin/conversaciones");
+  revalidatePath(`/admin/conversaciones/${parsed.id}`);
+  revalidatePath(`/admin/clientes/${conversation.data.customer_id}`);
+}
+
+export async function sendWhatsAppContactTemplate(formData: FormData) {
+  const session = await requireAdmin("business");
+  const client = getSupabaseAdmin();
+  if (!client) throw new Error("Supabase no está disponible");
+  const parsed = z.object({
+    id: z.string().uuid(),
+    idempotencyKey: z.string().uuid(),
+    topic: z.string().trim().min(2).max(120),
+    consent: z.literal("confirmed"),
+  }).parse({ id: formData.get("id"), idempotencyKey: formData.get("idempotency_key"), topic: formData.get("topic"), consent: formData.get("consent") });
+  const templateName = process.env.WHATSAPP_INIT_TEMPLATE_NAME;
+  const language = process.env.WHATSAPP_INIT_TEMPLATE_LANGUAGE || "es_CO";
+  if (!templateName) throw new Error("La plantilla inicial aún no está configurada");
+  const conversation = await client.from("whatsapp_conversations").select("id,customer_id,normalized_phone,last_inbound_at,customer:customers(name)").eq("id", parsed.id).is("deleted_at", null).maybeSingle();
+  if (conversation.error || !conversation.data) throw new Error("La conversación ya no está disponible");
+  const inboundAt = conversation.data.last_inbound_at ? new Date(conversation.data.last_inbound_at).getTime() : 0;
+  if (inboundAt && Date.now() - inboundAt <= 24 * 60 * 60 * 1000) throw new Error("La conversación está abierta; envía un mensaje normal");
+  const recent = await client.from("whatsapp_template_sends").select("id,status").eq("conversation_id", parsed.id).in("status", ["pending", "accepted"]).gte("created_at", new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()).limit(1).maybeSingle();
+  if (recent.error) throw new Error("No se pudo validar el historial de plantillas");
+  if (recent.data) throw new Error("Ya existe una plantilla enviada o en proceso durante las últimas 24 horas");
+  const customer = conversation.data.customer as unknown as { name?: string } | null;
+  const now = new Date().toISOString();
+  const reservation = await client.from("whatsapp_template_sends").insert({
+    idempotency_key: parsed.idempotencyKey,
+    conversation_id: parsed.id,
+    customer_id: conversation.data.customer_id,
+    template_name: templateName,
+    language,
+    topic: parsed.topic,
+    consent_version: "whatsapp_contact_v1",
+    consent_source: "admin_attestation",
+    consented_at: now,
+    actor_role: session.role,
+  }).select("id").maybeSingle();
+  if (reservation.error || !reservation.data) {
+    const duplicate = await client.from("whatsapp_template_sends").select("id,status").eq("idempotency_key", parsed.idempotencyKey).maybeSingle();
+    if (duplicate.data) return;
+    throw new Error("No se pudo reservar el envío seguro");
+  }
+  const consent = await client.from("customers").update({
+    transactional_consent: true,
+    whatsapp_consent_at: now,
+    whatsapp_consent_source: "admin_attestation",
+    whatsapp_consent_version: "whatsapp_contact_v1",
+    updated_at: now,
+  }).eq("id", conversation.data.customer_id);
+  if (consent.error) {
+    await client.from("whatsapp_template_sends").update({ status: "failed", error_code: "consent_store_failed", updated_at: new Date().toISOString() }).eq("id", reservation.data.id);
+    throw new Error("No se pudo registrar el consentimiento");
+  }
+  let sent: Awaited<ReturnType<typeof sendMetaContactTemplate>>;
+  try {
+    sent = await sendMetaContactTemplate(conversation.data.normalized_phone, customer?.name || `Cliente ${conversation.data.normalized_phone.slice(-4)}`, parsed.topic);
+  } catch (error) {
+    await client.from("whatsapp_template_sends").update({ status: "failed", error_code: error instanceof Error ? error.message.slice(0, 80) : "unknown", updated_at: new Date().toISOString() }).eq("id", reservation.data.id);
+    throw error;
+  }
+  await client.from("whatsapp_template_sends").update({ status: "accepted", provider_message_id: sent.messageId, updated_at: new Date().toISOString() }).eq("id", reservation.data.id);
+  const stored = await client.from("whatsapp_messages").insert({
+      conversation_id: parsed.id,
+      customer_id: conversation.data.customer_id,
+      provider_message_id: sent.messageId,
+      direction: "outbound",
+      message_type: "template",
+      body: `Solicitud de contacto: ${parsed.topic}`,
+      delivery_status: "accepted",
+      metadata: { actor: "operator", template_name: sent.templateName, language, consent_version: "whatsapp_contact_v1" },
+  });
+  await client.from("whatsapp_conversations").update({ status: "esperando_cliente", automation_mode: "autonomous", unread_count: 0, last_message_at: now, last_outbound_at: now, updated_at: now }).eq("id", parsed.id);
+  await client.from("customer_activities").insert({ customer_id: conversation.data.customer_id, activity_type: "whatsapp_template_sent", summary: `Plantilla de contacto enviada: ${parsed.topic}`.slice(0, 300), actor_role: session.role, metadata: { template_name: sent.templateName, consent_source: "admin_attestation", consent_version: "whatsapp_contact_v1" } });
+  await writeAudit(client, stored.error ? "whatsapp_template_store_failed" : "whatsapp_template_sent", "whatsapp_conversation", parsed.id, session.role, { template_name: sent.templateName, provider_message_id: sent.messageId });
   revalidatePath("/admin/conversaciones");
   revalidatePath(`/admin/conversaciones/${parsed.id}`);
   revalidatePath(`/admin/clientes/${conversation.data.customer_id}`);

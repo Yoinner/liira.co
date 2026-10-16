@@ -1,5 +1,7 @@
 import "server-only";
 
+import { contactTemplatePayload } from "@/lib/whatsapp/contact-template";
+
 const GRAPH_VERSION = process.env.META_GRAPH_API_VERSION || "v26.0";
 
 function credentials() {
@@ -22,6 +24,22 @@ export async function sendMetaText(to: string, body: string) {
   const messageId = payload.messages?.[0]?.id;
   if (!response.ok || !messageId) throw new Error("meta_message_rejected");
   return messageId;
+}
+
+export async function sendMetaContactTemplate(to: string, customerName: string, topic: string) {
+  const { accessToken, phoneNumberId } = credentials();
+  const templateName = process.env.WHATSAPP_INIT_TEMPLATE_NAME;
+  if (!templateName) throw new Error("whatsapp_template_not_configured");
+  const response = await fetch(`https://graph.facebook.com/${GRAPH_VERSION}/${phoneNumberId}/messages`, {
+    method: "POST",
+    headers: { authorization: `Bearer ${accessToken}`, "content-type": "application/json" },
+    body: JSON.stringify(contactTemplatePayload(to, customerName, topic, templateName, process.env.WHATSAPP_INIT_TEMPLATE_LANGUAGE || "es_CO")),
+    signal: AbortSignal.timeout(10_000),
+  });
+  const payload = await response.json() as { messages?: Array<{ id?: string }> };
+  const messageId = payload.messages?.[0]?.id;
+  if (!response.ok || !messageId) throw new Error("meta_template_rejected");
+  return { messageId, templateName };
 }
 
 export async function downloadMetaMedia(mediaId: string) {
