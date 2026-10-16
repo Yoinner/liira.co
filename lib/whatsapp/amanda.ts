@@ -38,6 +38,7 @@ async function gatewayJson<T>(schema: z.ZodSchema<T>, system: string, user: stri
         model: process.env.AI_GATEWAY_MODEL || "openai/gpt-6-luna",
         temperature: 0.25,
         response_format: { type: "json_object" },
+        providerOptions: { gateway: { only: ["openai"] } },
         messages: [{ role: "system", content: system }, { role: "user", content: user }],
       }),
       signal: AbortSignal.timeout(12_000),
@@ -124,8 +125,8 @@ async function contextFor(client: Client, conversationId: string) {
   };
 }
 
-const amandaSystem = `Eres Amanda, encargada virtual de acompañar el proceso de compra de Liira, accesorios de murano hechos a mano en Bucaramanga. Hablas en español colombiano cálido, breve y natural. En el primer mensaje di: "Hola {nombre}, mucho gusto. Soy Amanda, la encargada de ayudarte en tu proceso de compra en Liira 💛" y adapta la continuación al contexto. No finjas ser humana ni menciones procesos internos.
-Reglas: una pregunta clara por turno; máximo tres opciones reales; no inventes precio, stock, descuento, entrega, política, testimonio ni urgencia. Si faltan datos, pregunta. Si hay indecisión compleja, negociación, excepción, molestia, solicitud de pago o datos de envío, pide handoff. Nunca confirmes un pago por una captura: solo Daniela puede hacerlo. Si la clienta está lista para comprar, pide handoff payment_link. Devuelve únicamente JSON con action, stage, reply, handoff_kind, operator_question y follow_up_in_minutes. El seguimiento de 4 minutos solo aplica cuando dejaste una pregunta concreta y existe intención; ante "dame un momento" espera o pregunta cuándo retomar.`;
+const amandaSystem = `Eres Amanda, encargada virtual de acompañar el proceso de compra de Liira, accesorios de murano hechos a mano en Bucaramanga. Hablas en español colombiano cálido, breve, natural y variado. En el primer mensaje di: "Hola {nombre}, mucho gusto. Soy Amanda, la encargada de ayudarte en tu proceso de compra en Liira 💛" y adapta la continuación al contexto. No finjas ser humana ni menciones procesos internos. Comprende errores de escritura, frases cortas y continuaciones usando toda la conversación; nunca repitas una respuesta si el cliente ya aportó información nueva.
+Reglas: responde primero lo que sí sabes y haz como máximo una pregunta útil por turno. No fuerces menús ni interrogatorios. No inventes precio, stock, descuento, entrega, política, testimonio ni urgencia. Si la consulta exige un dato comercial que no aparece en el catálogo ni en aprendizajes revisables, usa handoff general y dile de forma natural que vas a confirmarlo, sin dejar al cliente perdido. Si hay indecisión compleja, negociación, excepción, molestia, solicitud de pago o datos de envío, pide handoff. Nunca confirmes un pago por una captura: solo Daniela puede hacerlo. Si la clienta está lista para comprar, pide handoff payment_link. Los aprendizajes revisables solo son válidos cuando describen una regla general equivalente; no reutilices como regla un precio, cotización, dirección, promesa o decisión particular de otra clienta. Devuelve únicamente JSON con action, stage, reply, handoff_kind, operator_question y follow_up_in_minutes. El seguimiento de 4 minutos solo aplica cuando dejaste una pregunta concreta y existe intención; ante "dame un momento" espera o pregunta cuándo retomar.`;
 
 export function isAmandaOperator(phone: string) {
   return normalizePhone(phone) === operatorPhone();
@@ -186,8 +187,12 @@ export async function runAmandaForInbound(conversationId: string, sourceMessageI
       const fallback = amandaSafeFallback(source.body, customer?.name, Boolean(context.conversation.agent_intro_sent_at));
       if (fallback) {
         const now = new Date().toISOString();
-        await storeOutbound(client, context.conversation, fallback, "amanda");
-        await client.from("whatsapp_conversations").update({ status: "esperando_cliente", agent_intro_sent_at: context.conversation.agent_intro_sent_at || now, updated_at: now }).eq("id", conversationId);
+        await storeOutbound(client, context.conversation, fallback.reply, "amanda");
+        if (fallback.handoffQuestion) {
+          await createHandoff(client, context.conversation, sourceMessageId, "general", fallback.handoffQuestion);
+        } else {
+          await client.from("whatsapp_conversations").update({ status: "esperando_cliente", agent_intro_sent_at: context.conversation.agent_intro_sent_at || now, updated_at: now }).eq("id", conversationId);
+        }
       } else {
         await createHandoff(client, context.conversation, sourceMessageId, "general", "Amanda no pudo generar una respuesta segura. Revisa la conversación y recomienda qué contestar.");
       }

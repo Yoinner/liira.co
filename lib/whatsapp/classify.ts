@@ -29,6 +29,7 @@ export async function analyzeWhatsAppConversation(conversationId: string, oidcTo
         model: process.env.AI_GATEWAY_MODEL || "openai/gpt-6-luna",
         temperature: 0,
         response_format: { type: "json_object" },
+        providerOptions: { gateway: { only: ["openai"] } },
         messages: [
           { role: "system", content: "Clasifica conversaciones comerciales de Liira Accesorios. Devuelve JSON con summary, intent, sentiment, next_action y confidence. No infieras rasgos sensibles ni inventes hechos." },
           { role: "user", content: transcript },
