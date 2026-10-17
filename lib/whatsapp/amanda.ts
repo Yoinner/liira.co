@@ -5,7 +5,7 @@ import { z } from "zod";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
 import { normalizePhone } from "@/lib/validation/crm";
 import { amandaSafeFallback } from "@/lib/whatsapp/amanda-copy";
-import { downloadMetaMedia, sendMetaText } from "@/lib/whatsapp/meta";
+import { downloadMetaMedia, sendMetaContactTemplate, sendMetaText } from "@/lib/whatsapp/meta";
 
 const operatorPhone = () => normalizePhone(process.env.AMANDA_OPERATOR_PHONE || "3016399833");
 const serviceWindowMs = 24 * 60 * 60 * 1000;
@@ -80,7 +80,6 @@ async function operatorWindowOpen(client: Client) {
 }
 
 async function notifyOperator(client: Client, handoff: { id: string; code: string; kind: string; question: string }, customerName: string) {
-  if (!(await operatorWindowOpen(client))) return;
   const labels: Record<string, string> = {
     media_review: "envió una imagen o video que necesita revisión",
     payment_link: "está lista para recibir el enlace de pago",
@@ -89,9 +88,14 @@ async function notifyOperator(client: Client, handoff: { id: string; code: strin
     general: "necesita tu criterio",
   };
   const body = `Amanda necesita tu ayuda · ${handoff.code}\nCliente: ${customerName}\nMotivo: ${labels[handoff.kind] || labels.general}\n${handoff.question}\n\nResponde empezando por ${handoff.code} y luego tu recomendación.`;
+  const claimed = await client.from("amanda_handoffs").update({ operator_delivery_status: "sending" }).eq("id", handoff.id).eq("operator_delivery_status", "queued").select("id").maybeSingle();
+  if (claimed.error || !claimed.data) return;
   try {
-    const providerMessageId = await sendMetaText(operatorPhone(), body);
-    await client.from("amanda_operator_messages").insert({ provider_message_id: providerMessageId, direction: "outbound", body, delivery_status: "accepted" });
+    const open = await operatorWindowOpen(client);
+    const sent = open
+      ? { messageId: await sendMetaText(operatorPhone(), body), templateName: null }
+      : await sendMetaContactTemplate(operatorPhone(), "Daniela", `${handoff.code} · ${customerName}: ${labels[handoff.kind] || labels.general}`.slice(0, 120));
+    await client.from("amanda_operator_messages").insert({ provider_message_id: sent.messageId, direction: "outbound", body: open ? body : `Alerta iniciada con plantilla: ${handoff.code}`, delivery_status: "accepted" });
     await client.from("amanda_handoffs").update({ operator_delivery_status: "sent" }).eq("id", handoff.id);
   } catch {
     await client.from("amanda_handoffs").update({ operator_delivery_status: "queued" }).eq("id", handoff.id);
@@ -273,6 +277,11 @@ export async function handleAmandaOperatorInbound(message: { messageId: string; 
 export async function runDueAmandaFollowups(oidcToken?: string | null) {
   const client = getSupabaseAdmin();
   if (!client || process.env.AMANDA_ENABLED !== "true") return 0;
+  const queued = await client.from("amanda_handoffs").select("id,code,kind,question,conversation:whatsapp_conversations(normalized_phone,customer:customers(name))").eq("status", "pending").eq("operator_delivery_status", "queued").order("created_at", { ascending: true }).limit(10);
+  for (const item of queued.data || []) {
+    const conversation = item.conversation as unknown as { normalized_phone?: string; customer?: { name?: string } } | null;
+    await notifyOperator(client, item, conversation?.customer?.name || conversation?.normalized_phone || "Cliente");
+  }
   const due = await client.from("whatsapp_conversations").select("*, customer:customers(name)").eq("automation_mode", "autonomous").is("deleted_at", null).lte("agent_follow_up_at", new Date().toISOString()).limit(20);
   let sent = 0;
   for (const conversation of due.data || []) {

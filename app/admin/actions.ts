@@ -8,7 +8,8 @@ import { clearAdminSession, requireAdmin } from "@/lib/auth/session";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
 import { customerUpdateSchema, inquiryUpdateSchema, normalizePhone, parseTags } from "@/lib/validation/crm";
 import { hasDependents, matchesDeletionConfirmation } from "@/lib/validation/deletion";
-import { sendMetaContactTemplate } from "@/lib/whatsapp/meta";
+import { inspectOutboundMedia } from "@/lib/whatsapp/outbound-media";
+import { sendMetaContactTemplate, sendMetaMedia, uploadMetaMedia } from "@/lib/whatsapp/meta";
 
 function slugify(value: string) {
   return value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
@@ -366,6 +367,54 @@ export async function sendWhatsAppMessage(formData: FormData) {
   await client.from("whatsapp_conversations").update({ status: "esperando_cliente", automation_mode: "human", agent_follow_up_at: null, unread_count: 0, last_message_at: now, last_outbound_at: now, updated_at: now }).eq("id", parsed.id);
   await client.from("customer_activities").insert({ customer_id: conversation.data.customer_id, activity_type: "whatsapp_outbound", summary: `Liira: ${parsed.body}`.slice(0, 300), actor_role: session.role, metadata: { provider_message_id: providerMessageId } });
   await writeAudit(client, "whatsapp_message_sent", "whatsapp_conversation", parsed.id, session.role, { provider_message_id: providerMessageId });
+  revalidatePath("/admin/conversaciones");
+  revalidatePath(`/admin/conversaciones/${parsed.id}`);
+  revalidatePath(`/admin/clientes/${conversation.data.customer_id}`);
+}
+
+export async function sendWhatsAppMedia(formData: FormData) {
+  const session = await requireAdmin("business");
+  const client = getSupabaseAdmin();
+  if (!client) throw new Error("Supabase no está disponible");
+  const parsed = z.object({ id: z.string().uuid(), caption: z.string().trim().max(1024) }).parse({ id: formData.get("id"), caption: String(formData.get("caption") || "") });
+  const file = formData.get("file");
+  if (!(file instanceof File) || !file.size) throw new Error("Selecciona una imagen o un video");
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  const media = inspectOutboundMedia(bytes, file.type);
+  const conversation = await client.from("whatsapp_conversations").select("id,customer_id,normalized_phone,last_inbound_at").eq("id", parsed.id).is("deleted_at", null).maybeSingle();
+  if (conversation.error || !conversation.data) throw new Error("La conversación ya no está disponible");
+  const inboundAt = conversation.data.last_inbound_at ? new Date(conversation.data.last_inbound_at).getTime() : 0;
+  if (!inboundAt || Date.now() - inboundAt > 24 * 60 * 60 * 1000) throw new Error("La ventana de atención terminó; primero usa una plantilla aprobada por Meta");
+
+  const storagePath = `outbound/${parsed.id}/${randomUUID()}.${media.extension}`;
+  const storedFile = await client.storage.from("whatsapp-media").upload(storagePath, bytes, { contentType: media.mimeType, upsert: false });
+  if (storedFile.error) throw new Error("No se pudo guardar el archivo");
+  try {
+    const mediaId = await uploadMetaMedia(bytes, media.mimeType, `liira.${media.extension}`);
+    const providerMessageId = await sendMetaMedia(conversation.data.normalized_phone, media.kind, mediaId, parsed.caption || null);
+    const now = new Date().toISOString();
+    const message = await client.from("whatsapp_messages").insert({
+      conversation_id: parsed.id,
+      customer_id: conversation.data.customer_id,
+      provider_message_id: providerMessageId,
+      direction: "outbound",
+      message_type: media.kind,
+      body: null,
+      media_id: mediaId,
+      media_path: storagePath,
+      media_mime_type: media.mimeType,
+      media_caption: parsed.caption || null,
+      delivery_status: "accepted",
+      metadata: { actor: "operator", original_name: file.name.slice(0, 180) },
+    });
+    if (message.error) throw new Error("El archivo fue aceptado por Meta, pero no se pudo registrar");
+    await client.from("whatsapp_conversations").update({ status: "esperando_cliente", automation_mode: "human", agent_follow_up_at: null, unread_count: 0, last_message_at: now, last_outbound_at: now, updated_at: now }).eq("id", parsed.id);
+    await client.from("customer_activities").insert({ customer_id: conversation.data.customer_id, activity_type: "whatsapp_outbound_media", summary: `Liira envió ${media.kind === "image" ? "una imagen" : "un video"}${parsed.caption ? `: ${parsed.caption}` : ""}`.slice(0, 300), actor_role: session.role, metadata: { provider_message_id: providerMessageId, media_type: media.mimeType } });
+    await writeAudit(client, "whatsapp_media_sent", "whatsapp_conversation", parsed.id, session.role, { provider_message_id: providerMessageId, media_type: media.mimeType, size: bytes.length });
+  } catch (error) {
+    await client.storage.from("whatsapp-media").remove([storagePath]);
+    throw error;
+  }
   revalidatePath("/admin/conversaciones");
   revalidatePath(`/admin/conversaciones/${parsed.id}`);
   revalidatePath(`/admin/clientes/${conversation.data.customer_id}`);

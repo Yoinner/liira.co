@@ -1,6 +1,7 @@
 import "server-only";
 
 import { contactTemplatePayload } from "@/lib/whatsapp/contact-template";
+import { mediaMessagePayload } from "@/lib/whatsapp/outbound-media";
 
 const GRAPH_VERSION = process.env.META_GRAPH_API_VERSION || "v26.0";
 
@@ -40,6 +41,37 @@ export async function sendMetaContactTemplate(to: string, customerName: string, 
   const messageId = payload.messages?.[0]?.id;
   if (!response.ok || !messageId) throw new Error("meta_template_rejected");
   return { messageId, templateName };
+}
+
+export async function uploadMetaMedia(bytes: Uint8Array, mimeType: string, filename: string) {
+  const { accessToken, phoneNumberId } = credentials();
+  const form = new FormData();
+  form.set("messaging_product", "whatsapp");
+  const buffer = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
+  form.set("file", new Blob([buffer], { type: mimeType }), filename);
+  const response = await fetch(`https://graph.facebook.com/${GRAPH_VERSION}/${phoneNumberId}/media`, {
+    method: "POST",
+    headers: { authorization: `Bearer ${accessToken}` },
+    body: form,
+    signal: AbortSignal.timeout(30_000),
+  });
+  const payload = await response.json() as { id?: string };
+  if (!response.ok || !payload.id) throw new Error("meta_media_upload_rejected");
+  return payload.id;
+}
+
+export async function sendMetaMedia(to: string, kind: "image" | "video", mediaId: string, caption?: string | null) {
+  const { accessToken, phoneNumberId } = credentials();
+  const response = await fetch(`https://graph.facebook.com/${GRAPH_VERSION}/${phoneNumberId}/messages`, {
+    method: "POST",
+    headers: { authorization: `Bearer ${accessToken}`, "content-type": "application/json" },
+    body: JSON.stringify(mediaMessagePayload(to, kind, mediaId, caption)),
+    signal: AbortSignal.timeout(15_000),
+  });
+  const payload = await response.json() as { messages?: Array<{ id?: string }> };
+  const messageId = payload.messages?.[0]?.id;
+  if (!response.ok || !messageId) throw new Error("meta_media_message_rejected");
+  return messageId;
 }
 
 export async function downloadMetaMedia(mediaId: string) {

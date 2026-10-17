@@ -657,6 +657,13 @@ html:has(.admin-shell), html:has(.admin-login-page) { font-size: 17px; }
 .reply-composer .admin-primary { background: var(--wa-deep); }
 .reply-composer textarea, .conversation-status-form select { width: 100%; padding: 12px; border: 1px solid var(--admin-line); border-radius: 10px; color: var(--admin-ink); background: var(--admin-panel); resize: vertical; }
 .reply-composer textarea:disabled { opacity: .7; cursor: not-allowed; }
+.reply-stack { display: grid; gap: 10px; }
+.media-composer { display: grid; grid-template-columns: minmax(220px,1fr) minmax(220px,1fr) auto; align-items: end; gap: 10px; padding: 14px; border-color: rgba(37,211,102,.28); }
+.media-composer label { display: grid; gap: 4px; color: var(--admin-ink); font-size: .54rem; }
+.media-composer label span { color: var(--admin-muted); font-size: .46rem; }
+.media-composer input[type="file"], .media-composer input[name="caption"] { width: 100%; min-height: 42px; padding: 10px 11px; border: 1px solid var(--admin-line); border-radius: 10px; color: var(--admin-ink); background: var(--admin-panel); }
+.media-composer input[type="file"]::file-selector-button { margin-right: 10px; padding: 7px 10px; border: 0; border-radius: 7px; color: white; background: var(--wa-deep); font-weight: 750; cursor: pointer; }
+.media-composer .admin-primary { background: var(--wa-deep); }
 .template-composer { display: grid; grid-template-columns: minmax(220px,.75fr) minmax(240px,1fr) minmax(260px,1.1fr) auto; align-items: end; gap: 12px; padding: 16px; border-color: rgba(7,94,84,.2); }
 .template-composer > div { align-self: center; }
 .template-composer > div p { margin: 4px 0 0; color: var(--admin-muted); font-size: .52rem; line-height: 1.5; }
@@ -770,6 +777,7 @@ html[data-admin-theme="dark"] .admin-danger { color: #f0a5b5; background: #29161
   .message-bubble { max-width: 88%; }
   .message-delete { opacity: 1; }
   .reply-composer { grid-template-columns: 1fr; }
+  .media-composer { grid-template-columns: 1fr; }
   .amanda-control { align-items: stretch; flex-direction: column; }
   .amanda-control form { display: grid; grid-template-columns: 1fr auto; }
   .operator-handoff { grid-template-columns: 26px minmax(0,1fr); }
