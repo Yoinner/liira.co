@@ -6,6 +6,7 @@ import { getSupabaseAdmin } from "@/lib/supabase/server";
 import { normalizePhone } from "@/lib/validation/crm";
 import { amandaSafeFallback } from "@/lib/whatsapp/amanda-copy";
 import { downloadMetaMedia, sendMetaContactTemplate, sendMetaText } from "@/lib/whatsapp/meta";
+import { shouldRetryOperatorAlert } from "@/lib/whatsapp/operator-alert";
 
 const operatorPhone = () => normalizePhone(process.env.AMANDA_OPERATOR_PHONE || "3016399833");
 const serviceWindowMs = 24 * 60 * 60 * 1000;
@@ -277,6 +278,13 @@ export async function handleAmandaOperatorInbound(message: { messageId: string; 
 export async function runDueAmandaFollowups(oidcToken?: string | null) {
   const client = getSupabaseAdmin();
   if (!client || process.env.AMANDA_ENABLED !== "true") return 0;
+  const previouslyAccepted = await client.from("amanda_handoffs").select("id,code,kind,question,conversation:whatsapp_conversations(normalized_phone,customer:customers(name))").eq("status", "pending").eq("operator_delivery_status", "sent").order("created_at", { ascending: true }).limit(10);
+  for (const item of previouslyAccepted.data || []) {
+    const attempts = await client.from("amanda_operator_messages").select("body,delivery_status").ilike("body", `%${item.code}%`).order("created_at", { ascending: false }).limit(5);
+    if (!attempts.error && shouldRetryOperatorAlert(attempts.data || [])) {
+      await client.from("amanda_handoffs").update({ operator_delivery_status: "queued" }).eq("id", item.id).eq("operator_delivery_status", "sent");
+    }
+  }
   const queued = await client.from("amanda_handoffs").select("id,code,kind,question,conversation:whatsapp_conversations(normalized_phone,customer:customers(name))").eq("status", "pending").eq("operator_delivery_status", "queued").order("created_at", { ascending: true }).limit(10);
   for (const item of queued.data || []) {
     const conversation = item.conversation as unknown as { normalized_phone?: string; customer?: { name?: string } } | null;

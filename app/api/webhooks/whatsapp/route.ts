@@ -134,8 +134,11 @@ export async function POST(request: Request) {
     const client = getSupabaseAdmin();
     for (const status of extractMessageStatuses(payload)) {
       if (!client) throw new Error("database_unavailable");
-      const updated = await client.from("whatsapp_messages").update({ delivery_status: status.status }).eq("provider_message_id", status.messageId);
-      if (updated.error) throw new Error("status_update_failed");
+      const [customerMessage, operatorMessage] = await Promise.all([
+        client.from("whatsapp_messages").update({ delivery_status: status.status }).eq("provider_message_id", status.messageId),
+        client.from("amanda_operator_messages").update({ delivery_status: status.status }).eq("provider_message_id", status.messageId),
+      ]);
+      if (customerMessage.error || operatorMessage.error) throw new Error("status_update_failed");
     }
     const oidcToken = request.headers.get("x-vercel-oidc-token");
     after(async () => {
