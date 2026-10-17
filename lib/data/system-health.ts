@@ -7,7 +7,7 @@ export type HealthState = "connected" | "configured" | "degraded" | "unavailable
 
 export async function getSystemHealth() {
   const client = getSupabaseAdmin();
-  const [databaseResult, storageResult, auditResult, crmResult, operatorResult, queuedAlerts] = client
+  const [databaseResult, storageResult, auditResult, crmResult, operatorResult, queuedAlerts, agentQueue, failedRuns] = client
     ? await Promise.all([
         client.from("categories").select("id", { count: "exact", head: true }),
         client.storage.listBuckets(),
@@ -15,8 +15,10 @@ export async function getSystemHealth() {
         client.from("customers").select("id", { count: "exact", head: true }),
         client.from("amanda_operator_messages").select("delivery_status,created_at").eq("direction", "outbound").order("created_at", { ascending: false }).limit(1).maybeSingle(),
         client.from("amanda_handoffs").select("id", { count: "exact", head: true }).eq("status", "pending").neq("operator_delivery_status", "sent"),
+        client.from("whatsapp_conversations").select("id", { count: "exact", head: true }).not("agent_due_at", "is", null),
+        client.from("amanda_agent_runs").select("source_message_id", { count: "exact", head: true }).eq("status", "failed").gte("created_at", new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()),
       ])
-    : [{ error: new Error("not configured"), count: null }, { error: new Error("not configured"), data: null }, { error: new Error("not configured"), data: null }, { error: new Error("not configured"), count: null }, { error: new Error("not configured"), data: null }, { error: new Error("not configured"), count: null }];
+    : [{ error: new Error("not configured"), count: null }, { error: new Error("not configured"), data: null }, { error: new Error("not configured"), data: null }, { error: new Error("not configured"), count: null }, { error: new Error("not configured"), data: null }, { error: new Error("not configured"), count: null }, { error: new Error("not configured"), count: null }, { error: new Error("not configured"), count: null }];
 
   const storageReady = !storageResult.error && Boolean(storageResult.data?.some((bucket) => bucket.id === "products"));
   const isVercel = Boolean(process.env.VERCEL);
@@ -25,6 +27,7 @@ export async function getSystemHealth() {
   const whatsappTemplateReady = Boolean(process.env.WHATSAPP_INIT_TEMPLATE_NAME && process.env.WHATSAPP_INIT_TEMPLATE_LANGUAGE);
   const operatorStatus = operatorResult.data?.delivery_status;
   const operatorReady = operatorStatus === "delivered" || operatorStatus === "read";
+  const operatorTemplateReady = Boolean(process.env.WHATSAPP_OPERATOR_TEMPLATE_NAME);
 
   return {
     checkedAt: new Date().toISOString(),
@@ -67,8 +70,13 @@ export async function getSystemHealth() {
       },
       {
         name: "Canal Amanda → Daniela",
-        state: (!client || operatorResult.error || queuedAlerts.error ? "unavailable" : operatorReady ? "connected" : operatorStatus ? "configured" : "degraded") as HealthState,
-        detail: !client ? "Supabase no configurado" : operatorResult.error || queuedAlerts.error ? "No se pudo consultar el canal privado" : operatorStatus ? `Último aviso: ${operatorStatus} · ${queuedAlerts.count ?? 0} en cola` : "Aún no hay avisos enviados",
+        state: (!client || operatorResult.error || queuedAlerts.error ? "unavailable" : !operatorTemplateReady ? "degraded" : operatorReady ? "connected" : operatorStatus ? "configured" : "degraded") as HealthState,
+        detail: !client ? "Supabase no configurado" : operatorResult.error || queuedAlerts.error ? "No se pudo consultar el canal privado" : `${operatorStatus ? `Último aviso: ${operatorStatus}` : "Aún no hay avisos enviados"} · ${queuedAlerts.count ?? 0} en cola${operatorTemplateReady ? "" : " · falta plantilla interna aprobada para fuera de 24 h"}`,
+      },
+      {
+        name: "Amanda · motor conversacional",
+        state: (!client || agentQueue.error || failedRuns.error ? "unavailable" : process.env.AMANDA_ENABLED !== "true" ? "configured" : (failedRuns.count || 0) > 0 ? "degraded" : "connected") as HealthState,
+        detail: !client || agentQueue.error || failedRuns.error ? "Cola o historial no accesible; revisa la migración" : process.env.AMANDA_ENABLED !== "true" ? "Automatización desactivada" : `${agentQueue.count ?? 0} conversaciones en cola · ${failedRuns.count ?? 0} ejecuciones fallidas en 24 h · modelo ${process.env.AI_GATEWAY_MODEL || "openai/gpt-6-luna"}`,
       },
     ],
     security: [

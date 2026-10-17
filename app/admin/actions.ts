@@ -5,10 +5,12 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { clearAdminSession, requireAdmin } from "@/lib/auth/session";
+import { safeGeneralRule } from "@/lib/agent-core/knowledge";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
 import { customerUpdateSchema, inquiryUpdateSchema, normalizePhone, parseTags } from "@/lib/validation/crm";
 import { hasDependents, matchesDeletionConfirmation } from "@/lib/validation/deletion";
 import { inspectOutboundMedia } from "@/lib/whatsapp/outbound-media";
+import { analyzeWhatsAppConversation } from "@/lib/whatsapp/classify";
 import { sendMetaContactTemplate, sendMetaMedia, uploadMetaMedia } from "@/lib/whatsapp/meta";
 
 function slugify(value: string) {
@@ -334,11 +336,23 @@ export async function updateWhatsAppConversation(formData: FormData) {
     id: z.string().uuid(),
     status: z.enum(["requiere_respuesta", "esperando_cliente", "cotizando", "cerrada_ganada", "cerrada_perdida"]),
   }).parse({ id: formData.get("id"), status: formData.get("status") });
-  const updated = await client.from("whatsapp_conversations").update({ status: parsed.status, unread_count: 0, updated_at: new Date().toISOString() }).eq("id", parsed.id);
+  const updated = await client.from("whatsapp_conversations").update({ status: parsed.status, status_manual_at: new Date().toISOString(), unread_count: 0, updated_at: new Date().toISOString() }).eq("id", parsed.id);
   if (updated.error) throw new Error("No se pudo actualizar la conversación");
   await writeAudit(client, "whatsapp_conversation_updated", "whatsapp_conversation", parsed.id, session.role, { status: parsed.status });
   revalidatePath("/admin/conversaciones");
   revalidatePath(`/admin/conversaciones/${parsed.id}`);
+}
+
+export async function reanalyzeWhatsAppConversation(formData: FormData) {
+  const session = await requireAdmin("business");
+  const id = z.string().uuid().parse(formData.get("id"));
+  const client = getSupabaseAdmin();
+  if (!client) throw new Error("Supabase no está disponible");
+  const conversation = await client.from("whatsapp_conversations").select("id").eq("id", id).is("deleted_at", null).maybeSingle();
+  if (conversation.error || !conversation.data) throw new Error("La conversación ya no está disponible");
+  await analyzeWhatsAppConversation(id, null, true);
+  await writeAudit(client, "whatsapp_conversation_reanalyzed", "whatsapp_conversation", id, session.role);
+  revalidatePath(`/admin/conversaciones/${id}`);
 }
 
 export async function sendWhatsAppMessage(formData: FormData) {
@@ -501,7 +515,7 @@ export async function updateAmandaMode(formData: FormData) {
   const client = getSupabaseAdmin();
   if (!client) throw new Error("Supabase no está disponible");
   const parsed = z.object({ id: z.string().uuid(), mode: z.enum(["autonomous", "paused", "human"]) }).parse({ id: formData.get("id"), mode: formData.get("mode") });
-  const changes: { automation_mode: typeof parsed.mode; updated_at: string; agent_follow_up_at?: null } = { automation_mode: parsed.mode, updated_at: new Date().toISOString() };
+  const changes: { automation_mode: typeof parsed.mode; updated_at: string; agent_follow_up_at?: null; agent_due_at?: null } = { automation_mode: parsed.mode, updated_at: new Date().toISOString(), agent_due_at: null };
   if (parsed.mode !== "autonomous") changes.agent_follow_up_at = null;
   const result = await client.from("whatsapp_conversations").update(changes).eq("id", parsed.id);
   if (result.error) throw new Error("No se pudo cambiar el modo de Amanda");
@@ -519,8 +533,38 @@ export async function cancelAmandaHandoff(formData: FormData) {
   if (cancelled.error || !cancelled.data) throw new Error("La alerta ya no está disponible");
   const remaining = await client.from("amanda_handoffs").select("id", { count: "exact", head: true }).eq("conversation_id", parsed.conversationId).eq("status", "pending");
   if (remaining.error) throw new Error("No se pudo comprobar el estado de Amanda");
-  if (!remaining.count) await client.from("whatsapp_conversations").update({ automation_mode: "autonomous", updated_at: new Date().toISOString() }).eq("id", parsed.conversationId);
+  if (!remaining.count) await client.from("whatsapp_conversations").update({ updated_at: new Date().toISOString() }).eq("id", parsed.conversationId);
   await writeAudit(client, "amanda_handoff_cancelled", "amanda_handoff", parsed.id, session.role, { conversation_id: parsed.conversationId });
+  revalidatePath(`/admin/conversaciones/${parsed.conversationId}`);
+}
+
+export async function approveAmandaKnowledge(formData: FormData) {
+  const session = await requireAdmin("business");
+  const client = getSupabaseAdmin();
+  if (!client) throw new Error("Supabase no está disponible");
+  const parsed = z.object({ id: z.string().uuid(), conversationId: z.string().uuid(), confirmation: z.literal("approved") }).parse({ id: formData.get("id"), conversationId: formData.get("conversationId"), confirmation: formData.get("confirmation") });
+  const rule = safeGeneralRule(String(formData.get("rule") || ""));
+  if (!rule) throw new Error("Escribe una regla general de 20 a 500 caracteres sin teléfonos, correos, enlaces ni importes particulares");
+  const source = await client.from("amanda_handoffs").select("id").eq("id", parsed.id).eq("conversation_id", parsed.conversationId).eq("status", "resolved").maybeSingle();
+  if (source.error || !source.data) throw new Error("La orientación debe estar resuelta antes de aprobar una regla");
+  const result = await client.from("amanda_knowledge").insert({ source_handoff_id: parsed.id, content: rule, approved_by_role: session.role }).select("id").single();
+  if (result.error || !result.data) throw new Error("La regla ya existe o no pudo guardarse");
+  await writeAudit(client, "amanda_knowledge_approved", "amanda_knowledge", result.data.id, session.role, { source_handoff_id: parsed.id });
+  revalidatePath(`/admin/conversaciones/${parsed.conversationId}`);
+}
+
+export async function revokeAmandaKnowledge(formData: FormData) {
+  const session = await requireAdmin("business");
+  const client = getSupabaseAdmin();
+  if (!client) throw new Error("Supabase no está disponible");
+  const parsed = z.object({ id: z.string().uuid(), conversationId: z.string().uuid() }).parse({ id: formData.get("id"), conversationId: formData.get("conversationId") });
+  const rule = await client.from("amanda_knowledge").select("id,source_handoff_id").eq("id", parsed.id).eq("status", "approved").maybeSingle();
+  if (rule.error || !rule.data) throw new Error("La regla ya no está activa");
+  const source = await client.from("amanda_handoffs").select("id").eq("id", rule.data.source_handoff_id).eq("conversation_id", parsed.conversationId).maybeSingle();
+  if (source.error || !source.data) throw new Error("La regla no pertenece a esta conversación");
+  const result = await client.from("amanda_knowledge").update({ status: "revoked", revoked_by_role: session.role, revoked_at: new Date().toISOString() }).eq("id", parsed.id).eq("status", "approved").select("id").maybeSingle();
+  if (result.error || !result.data) throw new Error("No se pudo revocar la regla");
+  await writeAudit(client, "amanda_knowledge_revoked", "amanda_knowledge", parsed.id, session.role);
   revalidatePath(`/admin/conversaciones/${parsed.conversationId}`);
 }
 

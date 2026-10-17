@@ -12,6 +12,7 @@ export type WhatsAppInboundMessage = {
   text: string | null;
   mediaId: string | null;
   mediaCaption: string | null;
+  replyToMessageId: string | null;
 };
 
 export type WhatsAppMessageStatus = {
@@ -94,6 +95,7 @@ export function extractInboundMessages(payload: unknown): WhatsAppInboundMessage
           text: messageText(message)?.slice(0, 240) || null,
           mediaId: media.id,
           mediaCaption: media.caption,
+          replyToMessageId: text(record(message.context)?.id) || null,
         });
       }
     }

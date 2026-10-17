@@ -39,7 +39,15 @@ test("extrae únicamente mensajes entrantes válidos y normalizados", () => {
     text: "Hola Liira",
     mediaId: null,
     mediaCaption: null,
+    replyToMessageId: null,
   }]);
+});
+
+test("conserva la referencia del mensaje que responde Daniela", () => {
+  const messages = extractInboundMessages({ entry: [{ changes: [{ field: "messages", value: {
+    messages: [{ from: "573016399833", id: "wamid.answer", type: "text", text: { body: "La tarifa es..." }, context: { id: "wamid.alert" } }],
+  } }] }] });
+  assert.equal(messages[0].replyToMessageId, "wamid.alert");
 });
 
 test("extrae imágenes y videos con su identificador y pie", () => {

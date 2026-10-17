@@ -43,6 +43,22 @@ export async function sendMetaContactTemplate(to: string, customerName: string, 
   return { messageId, templateName };
 }
 
+export async function sendMetaOperatorTemplate(to: string, caseSummary: string) {
+  const { accessToken, phoneNumberId } = credentials();
+  const templateName = process.env.WHATSAPP_OPERATOR_TEMPLATE_NAME;
+  if (!templateName) throw new Error("operator_template_not_configured");
+  const response = await fetch(`https://graph.facebook.com/${GRAPH_VERSION}/${phoneNumberId}/messages`, {
+    method: "POST",
+    headers: { authorization: `Bearer ${accessToken}`, "content-type": "application/json" },
+    body: JSON.stringify(contactTemplatePayload(to, "Daniela", caseSummary, templateName, process.env.WHATSAPP_OPERATOR_TEMPLATE_LANGUAGE || "es_CO")),
+    signal: AbortSignal.timeout(10_000),
+  });
+  const payload = await response.json() as { messages?: Array<{ id?: string }> };
+  const messageId = payload.messages?.[0]?.id;
+  if (!response.ok || !messageId) throw new Error("operator_template_rejected");
+  return { messageId, templateName };
+}
+
 export async function uploadMetaMedia(bytes: Uint8Array, mimeType: string, filename: string) {
   const { accessToken, phoneNumberId } = credentials();
   const form = new FormData();

@@ -3,14 +3,20 @@ import test from "node:test";
 import { amandaSafeFallback } from "../lib/whatsapp/amanda-copy.ts";
 
 test("responde saludos simples aunque AI Gateway no esté disponible", () => {
-  assert.match(amandaSafeFallback("buena", "Daniela García").reply, /Hola Daniela.*Soy Amanda.*disponible.*personalizado/s);
-  assert.match(amandaSafeFallback("ola", "Daniela", true).reply, /Hola de nuevo.*en qué te gustaría/s);
+  assert.match(amandaSafeFallback("buena", "Daniela García").reply, /Hola Daniela.*Soy Amanda.*asistente virtual.*disponible.*personalizado/s);
+  assert.match(amandaSafeFallback("ola", "Daniela", true).reply, /Hola de nuevo.*aquí estoy para ayudarte/is);
 });
 
 test("pide contexto sin inventar cuando falla la IA", () => {
-  assert.match(amandaSafeFallback("Quiero eso pero no sé", "Daniela").reply, /Quiero entenderte bien.*producto disponible.*personalizado.*pedido/s);
-  assert.equal(amandaSafeFallback("La verdad", "Daniela", true).reply, "Entiendo. Para ayudarte bien, ¿qué te gustaría saber o conseguir en este momento?");
+  assert.match(amandaSafeFallback("Quiero eso pero no sé", "Daniela").handoffQuestion, /Primera consulta.*Quiero eso pero no sé/s);
+  assert.match(amandaSafeFallback("La verdad", "Daniela", true).handoffQuestion, /La verdad/);
   assert.equal(amandaSafeFallback("   ", "Daniela"), null);
+});
+
+test("en una caída facilita el catálogo real sin devolver un menú genérico", () => {
+  const fallback = amandaSafeFallback("¿Dónde puedo mirar los productos?", "Laura", true);
+  assert.match(fallback.reply, /https:\/\/liira-co\.vercel\.app\/catalogo/);
+  assert.equal(fallback.handoffQuestion, undefined);
 });
 
 test("escala consultas de envío sin abandonar ni repetir al cliente", () => {

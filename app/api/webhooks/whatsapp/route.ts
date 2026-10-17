@@ -52,10 +52,14 @@ async function persistInboundMessage(message: WhatsAppInboundMessage) {
     customer_id: customerId,
     normalized_phone: message.phone,
     status: "requiere_respuesta",
+    status_manual_at: null,
     last_message_at: now,
     last_inbound_at: now,
     agent_follow_up_at: null,
     agent_follow_up_source_message_id: null,
+    agent_due_at: new Date(Date.now() + 3_000).toISOString(),
+    ai_status: "pending",
+    ai_error_code: null,
     updated_at: now,
   }, { onConflict: "normalized_phone" }).select("id,unread_count").single();
   if (conversation.error || !conversation.data) throw new Error("conversation_upsert_failed");
@@ -145,8 +149,11 @@ export async function POST(request: Request) {
       for (const message of operatorMessages) await handleAmandaOperatorInbound(message, oidcToken);
       for (const item of customerMessages) {
         await persistWhatsAppMedia(item.messageId);
-        await analyzeWhatsAppConversation(item.conversationId, oidcToken);
-        await runAmandaForInbound(item.conversationId, item.messageId, oidcToken);
+      }
+      if (customerMessages.length) await new Promise((resolve) => setTimeout(resolve, 3_200));
+      for (const conversationId of new Set(customerMessages.map((item) => item.conversationId))) {
+        if (process.env.AMANDA_ENABLED === "true") await runAmandaForInbound(conversationId, oidcToken);
+        else await analyzeWhatsAppConversation(conversationId, oidcToken);
       }
     });
   } catch {

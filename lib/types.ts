@@ -123,6 +123,10 @@ export type WhatsAppConversation = {
   ai_next_action: string | null;
   ai_confidence: number | null;
   ai_analyzed_at: string | null;
+  ai_status: "pending" | "processing" | "completed" | "error";
+  ai_error_code: string | null;
+  ai_model: string | null;
+  ai_source_message_id: string | null;
   automation_mode: "autonomous" | "paused" | "human";
   agent_stage: string;
   agent_follow_up_at: string | null;
@@ -158,6 +162,7 @@ export type AmandaHandoff = {
   question: string;
   operator_guidance: string | null;
   operator_delivery_status: string;
+  application_status: "pending" | "applied" | "not_applied";
   created_at: string;
   resolved_at: string | null;
 };

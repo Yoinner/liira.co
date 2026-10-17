@@ -1,11 +1,13 @@
 # Amanda · operación comercial autónoma de Liira
 
+> Estado de implementación y límites de la reconstrucción: [núcleo conversacional](agent-core/README.md). Las secciones de arquitectura y despliegue gradual de esta página son una propuesta histórica, no una verificación de producción.
+
 ## Contrato operativo implementado
 
 - Amanda responde desde el número oficial de Liira cuando `AMANDA_ENABLED=true` y la conversación está en modo `autonomous`.
-- Daniela opera el canal privado `573016399833`. Para abrir la ventana oficial debe escribir al número de Liira al menos una vez cada 24 horas; una plantilla aprobada será necesaria para alertas iniciadas fuera de esa ventana.
+- Daniela opera un canal privado. Dentro de 24 horas recibe texto libre; fuera de la ventana la alerta queda en cola hasta configurar una plantilla interna específica aprobada por Meta. Hay que verificar su entrega real antes de publicar esta reconstrucción.
 - Las consultas humanas llevan código `LIR-XXXXXX`. Daniela responde con ese código y su recomendación; Amanda la transforma en una respuesta coherente para la clienta sin inventar información.
-- Imágenes y videos entrantes se descargan desde Meta, se guardan en un bucket privado y se sirven únicamente al panel autenticado. Toda pieza visual genera intervención humana.
+- Imágenes y videos entrantes se descargan desde Meta, se guardan en un bucket privado y se sirven únicamente al panel autenticado. Las referencias multimedia requieren revisión humana; el sistema no finge haberlas analizado visualmente.
 - Cuando la clienta está lista para comprar, Amanda solicita el enlace a Daniela. Una captura nunca confirma el pago: únicamente la respuesta explícita `pago confirmado` de Daniela habilita la recolección de nombre, dirección, barrio y ciudad.
 - Los seguimientos se guardan en base de datos y Supabase Cron consulta cada minuto los vencidos. Solo se envía un microseguimiento si la última intervención fue de Liira y la ventana de servicio sigue abierta.
 - La eliminación de mensajes y conversaciones es local y auditable; no borra el contenido del dispositivo del cliente.
