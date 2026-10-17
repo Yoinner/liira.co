@@ -7,20 +7,24 @@ export type HealthState = "connected" | "configured" | "degraded" | "unavailable
 
 export async function getSystemHealth() {
   const client = getSupabaseAdmin();
-  const [databaseResult, storageResult, auditResult, crmResult] = client
+  const [databaseResult, storageResult, auditResult, crmResult, operatorResult, queuedAlerts] = client
     ? await Promise.all([
         client.from("categories").select("id", { count: "exact", head: true }),
         client.storage.listBuckets(),
         client.from("audit_events").select("id,action,entity_type,created_at").order("created_at", { ascending: false }).limit(8),
         client.from("customers").select("id", { count: "exact", head: true }),
+        client.from("amanda_operator_messages").select("delivery_status,created_at").eq("direction", "outbound").order("created_at", { ascending: false }).limit(1).maybeSingle(),
+        client.from("amanda_handoffs").select("id", { count: "exact", head: true }).eq("status", "pending").neq("operator_delivery_status", "sent"),
       ])
-    : [{ error: new Error("not configured"), count: null }, { error: new Error("not configured"), data: null }, { error: new Error("not configured"), data: null }, { error: new Error("not configured"), count: null }];
+    : [{ error: new Error("not configured"), count: null }, { error: new Error("not configured"), data: null }, { error: new Error("not configured"), data: null }, { error: new Error("not configured"), count: null }, { error: new Error("not configured"), data: null }, { error: new Error("not configured"), count: null }];
 
   const storageReady = !storageResult.error && Boolean(storageResult.data?.some((bucket) => bucket.id === "products"));
   const isVercel = Boolean(process.env.VERCEL);
   const whatsappWebhookReady = Boolean(process.env.WHATSAPP_VERIFY_TOKEN && process.env.META_APP_SECRET);
   const whatsappMessagingReady = Boolean(process.env.WHATSAPP_ACCESS_TOKEN && process.env.WHATSAPP_PHONE_NUMBER_ID && process.env.WHATSAPP_BUSINESS_ACCOUNT_ID);
   const whatsappTemplateReady = Boolean(process.env.WHATSAPP_INIT_TEMPLATE_NAME && process.env.WHATSAPP_INIT_TEMPLATE_LANGUAGE);
+  const operatorStatus = operatorResult.data?.delivery_status;
+  const operatorReady = operatorStatus === "delivered" || operatorStatus === "read";
 
   return {
     checkedAt: new Date().toISOString(),
@@ -60,6 +64,11 @@ export async function getSystemHealth() {
         name: "WhatsApp Cloud API",
         state: (whatsappWebhookReady && whatsappMessagingReady && whatsappTemplateReady ? "configured" : whatsappWebhookReady || whatsappMessagingReady ? "degraded" : "unavailable") as HealthState,
         detail: whatsappWebhookReady && whatsappMessagingReady && whatsappTemplateReady ? "Webhook firmado, mensajería y plantilla de inicio configurados" : whatsappWebhookReady && whatsappMessagingReady ? "Mensajería activa; falta la plantilla aprobada para iniciar conversaciones" : whatsappWebhookReady ? "Webhook preparado; faltan credenciales del número" : "Webhook y credenciales pendientes",
+      },
+      {
+        name: "Canal Amanda → Daniela",
+        state: (!client || operatorResult.error || queuedAlerts.error ? "unavailable" : operatorReady ? "connected" : operatorStatus ? "configured" : "degraded") as HealthState,
+        detail: !client ? "Supabase no configurado" : operatorResult.error || queuedAlerts.error ? "No se pudo consultar el canal privado" : operatorStatus ? `Último aviso: ${operatorStatus} · ${queuedAlerts.count ?? 0} en cola` : "Aún no hay avisos enviados",
       },
     ],
     security: [
