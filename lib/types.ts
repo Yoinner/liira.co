@@ -162,7 +162,8 @@ export type AmandaHandoff = {
   question: string;
   operator_guidance: string | null;
   operator_delivery_status: string;
-  application_status: "pending" | "applied" | "not_applied";
+  application_status: "pending" | "processing" | "sending" | "send_unconfirmed" | "applied" | "not_applied";
+  guidance_error_code: string | null;
   created_at: string;
   resolved_at: string | null;
 };

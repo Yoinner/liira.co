@@ -22,6 +22,14 @@ export const navigation = [
   { href: "/nosotros", label: "Nosotros" },
 ] as const;
 
+export const shippingPolicy = {
+  coverage: "Liira despacha desde Bucaramanga a destinos en Colombia. La cobertura, el valor y el tiempo estimado se confirman por WhatsApp antes de cerrar cada pedido.",
+  custom: "Las piezas disponibles se preparan para despacho una vez confirmado el pedido. Las piezas personalizadas requieren un tiempo de elaboración que se informa antes de recibir el pago.",
+  review: "Al recibirlo, revisa el paquete y comunícanos cualquier novedad lo antes posible, incluyendo fotografías del empaque y de la pieza. Cada caso será revisado de forma individual.",
+  changes: "Antes de enviar una pieza para cambio, es necesario acordarlo por WhatsApp. Las piezas personalizadas no pueden cambiarse por preferencias de color o diseño una vez aprobadas, salvo que presenten una novedad atribuible a la elaboración.",
+  pending: "Los plazos definitivos, transportadora, tarifas, condiciones de retracto y garantía se comunicarán durante el pedido y se actualizarán aquí cuando Liira los formalice.",
+} as const;
+
 export function whatsappUrl(message: string) {
   return `https://wa.me/${siteConfig.whatsapp}?text=${encodeURIComponent(message)}`;
 }

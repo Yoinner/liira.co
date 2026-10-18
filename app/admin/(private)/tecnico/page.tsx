@@ -9,7 +9,7 @@ const labels: Record<HealthState, string> = {
   unavailable: "No disponible",
 };
 
-const icons = [Cloud, Database, HardDrive, UsersRound, MessageCircle, Activity, MessageCircle, Activity];
+const icons = [Cloud, Database, HardDrive, UsersRound, MessageCircle, Activity, MessageCircle, Activity, Activity];
 
 export default async function TechnicalPage() {
   await requireAdmin("technical");

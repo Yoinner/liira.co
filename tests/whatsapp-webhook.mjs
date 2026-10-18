@@ -50,6 +50,15 @@ test("conserva la referencia del mensaje que responde Daniela", () => {
   assert.equal(messages[0].replyToMessageId, "wamid.alert");
 });
 
+test("conserva solicitudes detalladas sin el antiguo corte de 240 caracteres", () => {
+  const detail = "Personalización ".repeat(30);
+  const messages = extractInboundMessages({ entry: [{ changes: [{ field: "messages", value: {
+    messages: [{ from: "573100000003", id: "wamid.long-local", type: "text", text: { body: detail } }],
+  } }] }] });
+  assert.equal(messages[0].text, detail.trim());
+  assert.ok(messages[0].text.length > 240);
+});
+
 test("extrae imágenes y videos con su identificador y pie", () => {
   const messages = extractInboundMessages({ entry: [{ changes: [{ field: "messages", value: {
     metadata: { phone_number_id: "12345" },

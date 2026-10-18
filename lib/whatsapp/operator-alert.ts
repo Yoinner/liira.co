@@ -3,3 +3,7 @@ export function shouldRetryOperatorAlert(messages: Array<{ body: string | null; 
   const templateAttempted = messages.some((message) => message.body?.startsWith("Alerta iniciada con plantilla:"));
   return !delivered && !templateAttempted;
 }
+
+export function canManuallyRequeueOperatorAlert(status: string, delivered: boolean) {
+  return (status === "sending" || status === "send_unconfirmed") && !delivered;
+}

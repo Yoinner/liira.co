@@ -2,7 +2,7 @@ import { timingSafeEqual } from "node:crypto";
 import { after } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
 import { analyzeWhatsAppConversation } from "@/lib/whatsapp/classify";
-import { handleAmandaOperatorInbound, isAmandaOperator, persistWhatsAppMedia, runAmandaForInbound } from "@/lib/whatsapp/amanda";
+import { handleAmandaOperatorInbound, isAmandaOperator, persistAmandaOperatorInbound, persistWhatsAppMedia, runAmandaForInbound } from "@/lib/whatsapp/amanda";
 import { extractInboundMessages, extractMessageStatuses, verifyMetaSignature, type WhatsAppInboundMessage } from "@/lib/whatsapp/webhook";
 
 export const dynamic = "force-dynamic";
@@ -18,79 +18,16 @@ function equalSecret(left: string, right: string) {
 async function persistInboundMessage(message: WhatsAppInboundMessage) {
   const client = getSupabaseAdmin();
   if (!client) throw new Error("database_unavailable");
-
-  const duplicate = await client.from("whatsapp_messages").select("conversation_id").eq("provider_message_id", message.messageId).maybeSingle();
-  if (duplicate.error) throw new Error("idempotency_check_failed");
-  if (duplicate.data) return null;
-
-  const now = new Date().toISOString();
-  const existing = await client.from("customers").select("id").eq("normalized_phone", message.phone).maybeSingle();
-  if (existing.error) throw new Error("customer_lookup_failed");
-
-  let customerId = existing.data?.id;
-  if (customerId) {
-    const updated = await client.from("customers").update({ last_contact_at: now, updated_at: now }).eq("id", customerId);
-    if (updated.error) throw new Error("customer_update_failed");
-  } else {
-    const created = await client.from("customers").insert({
-      normalized_phone: message.phone,
-      phone: message.phone,
-      name: message.contactName,
-      last_contact_at: now,
-    }).select("id").single();
-    if (created.error || !created.data) {
-      const raced = await client.from("customers").select("id").eq("normalized_phone", message.phone).maybeSingle();
-      if (raced.error || !raced.data) throw new Error("customer_create_failed");
-      customerId = raced.data.id;
-    } else {
-      customerId = created.data.id;
-    }
-  }
-
-  const summary = message.text ? `WhatsApp: ${message.text}` : `Mensaje de WhatsApp (${message.messageType})`;
-  const conversation = await client.from("whatsapp_conversations").upsert({
-    customer_id: customerId,
-    normalized_phone: message.phone,
-    status: "requiere_respuesta",
-    status_manual_at: null,
-    last_message_at: now,
-    last_inbound_at: now,
-    agent_follow_up_at: null,
-    agent_follow_up_source_message_id: null,
-    agent_due_at: new Date(Date.now() + 3_000).toISOString(),
-    ai_status: "pending",
-    ai_error_code: null,
-    updated_at: now,
-  }, { onConflict: "normalized_phone" }).select("id,unread_count").single();
-  if (conversation.error || !conversation.data) throw new Error("conversation_upsert_failed");
-  const unread = await client.rpc("increment_whatsapp_unread", { conversation: conversation.data.id });
-  if (unread.error) throw new Error("conversation_counter_failed");
-  const stored = await client.from("whatsapp_messages").insert({
-    conversation_id: conversation.data.id,
-    customer_id: customerId,
-    provider_message_id: message.messageId,
-    direction: "inbound",
-    message_type: message.messageType,
-    body: message.text,
-    media_id: message.mediaId,
-    media_caption: message.mediaCaption,
-    provider_timestamp: message.providerTimestamp ? new Date(Number(message.providerTimestamp) * 1000).toISOString() : null,
-    metadata: { phone_number_id: message.phoneNumberId },
-  }).select("id").single();
-  if (stored.error || !stored.data) throw new Error("message_persist_failed");
-  const inserted = await client.from("customer_activities").insert({
-    customer_id: customerId,
-    activity_type: "whatsapp_inbound",
-    summary: summary.slice(0, 300),
-    metadata: {
-      message_type: message.messageType,
-      phone_number_id: message.phoneNumberId,
-      provider_message_id: message.messageId,
-      provider_timestamp: message.providerTimestamp,
-    },
+  const seconds = Number(message.providerTimestamp);
+  const providerAt = message.providerTimestamp && Number.isFinite(seconds) && seconds > 0 && seconds < 4_102_444_800 ? new Date(seconds * 1000).toISOString() : null;
+  const result = await client.rpc("persist_liira_whatsapp_inbound", {
+    p_phone: message.phone, p_name: message.contactName, p_message_id: message.messageId,
+    p_type: message.messageType, p_body: message.text, p_media_id: message.mediaId,
+    p_caption: message.mediaCaption, p_provider_at: providerAt, p_phone_number_id: message.phoneNumberId,
   });
-  if (inserted.error) throw new Error("activity_persist_failed");
-  return { conversationId: conversation.data.id as string, messageId: stored.data.id as string };
+  if (result.error || !result.data?.[0]) throw new Error("inbound_persist_failed");
+  const row = result.data[0];
+  return row.inserted ? { conversationId: row.conversation_id as string, messageId: row.message_id as string } : null;
 }
 
 export async function GET(request: Request) {
@@ -127,9 +64,12 @@ export async function POST(request: Request) {
 
   try {
     const customerMessages: Array<{ conversationId: string; messageId: string }> = [];
-    const operatorMessages: WhatsAppInboundMessage[] = [];
+    const operatorMessageIds: string[] = [];
     for (const message of extractInboundMessages(payload)) {
-      if (isAmandaOperator(message.phone)) operatorMessages.push(message);
+      if (isAmandaOperator(message.phone)) {
+        const id = await persistAmandaOperatorInbound(message);
+        if (id) operatorMessageIds.push(id);
+      }
       else {
         const stored = await persistInboundMessage(message);
         if (stored) customerMessages.push(stored);
@@ -146,7 +86,7 @@ export async function POST(request: Request) {
     }
     const oidcToken = request.headers.get("x-vercel-oidc-token");
     after(async () => {
-      for (const message of operatorMessages) await handleAmandaOperatorInbound(message, oidcToken);
+      for (const id of operatorMessageIds) await handleAmandaOperatorInbound(id, oidcToken);
       for (const item of customerMessages) {
         await persistWhatsAppMedia(item.messageId);
       }

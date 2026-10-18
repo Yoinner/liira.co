@@ -6,6 +6,7 @@ out/
 .env.*.local
 *.log
 .vercel
+supabase/.temp/
 .admin-credentials.local
 tsconfig.tsbuildinfo
 .DS_Store

@@ -2,12 +2,13 @@ import "server-only";
 
 import { siteConfig } from "@/lib/config";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
+import { defaultAgentModel } from "@/lib/agent-core/gateway";
 
 export type HealthState = "connected" | "configured" | "degraded" | "unavailable";
 
 export async function getSystemHealth() {
   const client = getSupabaseAdmin();
-  const [databaseResult, storageResult, auditResult, crmResult, operatorResult, queuedAlerts, agentQueue, failedRuns] = client
+  const [databaseResult, storageResult, auditResult, crmResult, operatorResult, queuedAlerts, agentQueue, failedRuns, gatewayUsage, manualOrders, operatorInbound] = client
     ? await Promise.all([
         client.from("categories").select("id", { count: "exact", head: true }),
         client.storage.listBuckets(),
@@ -17,8 +18,11 @@ export async function getSystemHealth() {
         client.from("amanda_handoffs").select("id", { count: "exact", head: true }).eq("status", "pending").neq("operator_delivery_status", "sent"),
         client.from("whatsapp_conversations").select("id", { count: "exact", head: true }).not("agent_due_at", "is", null),
         client.from("amanda_agent_runs").select("source_message_id", { count: "exact", head: true }).eq("status", "failed").gte("created_at", new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()),
+        client.from("amanda_gateway_requests").select("id", { count: "exact", head: true }).gte("reserved_at", new Date(Date.now() - 60_000).toISOString()),
+        client.from("amanda_manual_orders").select("id", { count: "exact", head: true }).eq("status", "awaiting_payment"),
+        client.from("amanda_operator_messages").select("id", { count: "exact", head: true }).eq("direction", "inbound").is("processed_at", null),
       ])
-    : [{ error: new Error("not configured"), count: null }, { error: new Error("not configured"), data: null }, { error: new Error("not configured"), data: null }, { error: new Error("not configured"), count: null }, { error: new Error("not configured"), data: null }, { error: new Error("not configured"), count: null }, { error: new Error("not configured"), count: null }, { error: new Error("not configured"), count: null }];
+    : [{ error: new Error("not configured"), count: null }, { error: new Error("not configured"), data: null }, { error: new Error("not configured"), data: null }, { error: new Error("not configured"), count: null }, { error: new Error("not configured"), data: null }, { error: new Error("not configured"), count: null }, { error: new Error("not configured"), count: null }, { error: new Error("not configured"), count: null }, { error: new Error("not configured"), count: null }, { error: new Error("not configured"), count: null }, { error: new Error("not configured"), count: null }];
 
   const storageReady = !storageResult.error && Boolean(storageResult.data?.some((bucket) => bucket.id === "products"));
   const isVercel = Boolean(process.env.VERCEL);
@@ -70,13 +74,18 @@ export async function getSystemHealth() {
       },
       {
         name: "Canal Amanda → Daniela",
-        state: (!client || operatorResult.error || queuedAlerts.error ? "unavailable" : !operatorTemplateReady ? "degraded" : operatorReady ? "connected" : operatorStatus ? "configured" : "degraded") as HealthState,
-        detail: !client ? "Supabase no configurado" : operatorResult.error || queuedAlerts.error ? "No se pudo consultar el canal privado" : `${operatorStatus ? `Último aviso: ${operatorStatus}` : "Aún no hay avisos enviados"} · ${queuedAlerts.count ?? 0} en cola${operatorTemplateReady ? "" : " · falta plantilla interna aprobada para fuera de 24 h"}`,
+        state: (!client || operatorResult.error || queuedAlerts.error || operatorInbound.error ? "unavailable" : !operatorTemplateReady || (operatorInbound.count || 0) > 0 ? "degraded" : operatorReady ? "connected" : operatorStatus ? "configured" : "degraded") as HealthState,
+        detail: !client ? "Supabase no configurado" : operatorResult.error || queuedAlerts.error || operatorInbound.error ? "No se pudo consultar el canal privado o su cola" : `${operatorStatus ? `Último aviso: ${operatorStatus}` : "Aún no hay avisos enviados"} · ${queuedAlerts.count ?? 0} alertas en cola · ${operatorInbound.count ?? 0} orientaciones pendientes${operatorTemplateReady ? "" : " · falta plantilla interna aprobada para fuera de 24 h"}`,
       },
       {
         name: "Amanda · motor conversacional",
-        state: (!client || agentQueue.error || failedRuns.error ? "unavailable" : process.env.AMANDA_ENABLED !== "true" ? "configured" : (failedRuns.count || 0) > 0 ? "degraded" : "connected") as HealthState,
-        detail: !client || agentQueue.error || failedRuns.error ? "Cola o historial no accesible; revisa la migración" : process.env.AMANDA_ENABLED !== "true" ? "Automatización desactivada" : `${agentQueue.count ?? 0} conversaciones en cola · ${failedRuns.count ?? 0} ejecuciones fallidas en 24 h · modelo ${process.env.AI_GATEWAY_MODEL || "openai/gpt-6-luna"}`,
+        state: (!client || agentQueue.error || failedRuns.error || gatewayUsage.error ? "unavailable" : process.env.AMANDA_ENABLED !== "true" ? "configured" : (failedRuns.count || 0) > 0 ? "degraded" : "configured") as HealthState,
+        detail: !client || agentQueue.error || failedRuns.error || gatewayUsage.error ? "Cola o historial no accesible; revisa las migraciones" : process.env.AMANDA_ENABLED !== "true" ? "Automatización desactivada" : `${agentQueue.count ?? 0} conversaciones en cola · ${failedRuns.count ?? 0} ejecuciones fallidas en 24 h · ${gatewayUsage.count ?? 0} solicitudes al Gateway en el último minuto · modelo ${process.env.AI_GATEWAY_MODEL || defaultAgentModel}`,
+      },
+      {
+        name: "Pagos manuales de Amanda",
+        state: (!client || manualOrders.error ? "unavailable" : "configured") as HealthState,
+        detail: !client || manualOrders.error ? "Módulo no disponible; migración o configuración pendiente" : `${manualOrders.count ?? 0} pedidos pendientes de pago · sin confirmación automática por comprobante`,
       },
     ],
     security: [

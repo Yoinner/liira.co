@@ -92,7 +92,7 @@ export function extractInboundMessages(payload: unknown): WhatsAppInboundMessage
           phone,
           phoneNumberId: text(metadata?.phone_number_id),
           providerTimestamp: text(message.timestamp) || null,
-          text: messageText(message)?.slice(0, 240) || null,
+          text: messageText(message)?.slice(0, 4096) || null,
           mediaId: media.id,
           mediaCaption: media.caption,
           replyToMessageId: text(record(message.context)?.id) || null,

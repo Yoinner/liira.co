@@ -1,7 +1,8 @@
 import type { Metadata } from "next";
+import { shippingPolicy } from "@/lib/config";
 
 export const metadata: Metadata = { title: "Envíos y cambios" };
 
 export default function ShippingPolicyPage() {
-  return <article className="legal-content"><p className="eyebrow">Última actualización: septiembre de 2026</p><h1>Envíos y cambios</h1><h2>Cobertura</h2><p>Liira despacha desde Bucaramanga a destinos en Colombia. La cobertura, el valor y el tiempo estimado se confirman por WhatsApp antes de cerrar cada pedido.</p><h2>Piezas disponibles y personalizadas</h2><p>Las piezas disponibles se preparan para despacho una vez confirmado el pedido. Las piezas personalizadas requieren un tiempo de elaboración que se informa antes de recibir el pago.</p><h2>Revisión del pedido</h2><p>Al recibirlo, revisa el paquete y comunícanos cualquier novedad lo antes posible, incluyendo fotografías del empaque y de la pieza. Cada caso será revisado de forma individual.</p><h2>Cambios</h2><p>Antes de enviar una pieza para cambio, es necesario acordarlo por WhatsApp. Las piezas personalizadas no pueden cambiarse por preferencias de color o diseño una vez aprobadas, salvo que presenten una novedad atribuible a la elaboración.</p><h2>Información pendiente de confirmación comercial</h2><p>Los plazos definitivos, transportadora, tarifas, condiciones de retracto y garantía se comunicarán durante el pedido y se actualizarán aquí cuando Liira los formalice.</p></article>;
+  return <article className="legal-content"><p className="eyebrow">Última actualización: septiembre de 2026</p><h1>Envíos y cambios</h1><h2>Cobertura</h2><p>{shippingPolicy.coverage}</p><h2>Piezas disponibles y personalizadas</h2><p>{shippingPolicy.custom}</p><h2>Revisión del pedido</h2><p>{shippingPolicy.review}</p><h2>Cambios</h2><p>{shippingPolicy.changes}</p><h2>Información pendiente de confirmación comercial</h2><p>{shippingPolicy.pending}</p></article>;
 }

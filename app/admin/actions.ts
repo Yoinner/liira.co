@@ -10,6 +10,7 @@ import { getSupabaseAdmin } from "@/lib/supabase/server";
 import { customerUpdateSchema, inquiryUpdateSchema, normalizePhone, parseTags } from "@/lib/validation/crm";
 import { hasDependents, matchesDeletionConfirmation } from "@/lib/validation/deletion";
 import { inspectOutboundMedia } from "@/lib/whatsapp/outbound-media";
+import { approvedPaymentUrl, paymentLinkHosts } from "@/lib/whatsapp/payment-safety";
 import { analyzeWhatsAppConversation } from "@/lib/whatsapp/classify";
 import { sendMetaContactTemplate, sendMetaMedia, uploadMetaMedia } from "@/lib/whatsapp/meta";
 
@@ -524,6 +525,63 @@ export async function updateAmandaMode(formData: FormData) {
   revalidatePath(`/admin/conversaciones/${parsed.id}`);
 }
 
+export async function approveAmandaPaymentMethod(formData: FormData) {
+  const session = await requireAdmin("business");
+  const client = getSupabaseAdmin();
+  if (!client) throw new Error("Supabase no está disponible");
+  const parsed = z.object({ method: z.enum(["nequi", "breb"]), recipient: z.string().trim().min(3).max(80), ownership: z.literal("confirmed"), disclosure: z.literal("approved") }).parse({
+    method: formData.get("method"), recipient: formData.get("recipient"), ownership: formData.get("ownership"), disclosure: formData.get("disclosure"),
+  });
+  if (parsed.method === "nequi" && !/^3\d{9}$/.test(parsed.recipient)) throw new Error("Nequi requiere un número colombiano de diez dígitos");
+  if (parsed.method === "breb" && !/^@[A-Za-z0-9._-]{3,30}$/.test(parsed.recipient)) throw new Error("La llave Bre-B debe comenzar por @ y tener un formato válido");
+  const result = await client.rpc("approve_amanda_payment_method", { p_method: parsed.method, p_recipient: parsed.recipient, p_role: session.role });
+  if (result.error) throw new Error("No se pudo aprobar este medio de pago");
+  revalidatePath("/admin/pagos");
+}
+
+export async function approveAmandaManualOrder(formData: FormData) {
+  const session = await requireAdmin("business");
+  const client = getSupabaseAdmin();
+  if (!client) throw new Error("Supabase no está disponible");
+  const parsed = z.object({ conversationId: z.string().uuid(), handoffId: z.string().uuid(), summary: z.string().trim().min(3).max(400), amount: z.coerce.number().int().positive().max(50_000_000), method: z.enum(["nequi", "breb", "link"]), link: z.string().trim().max(2000).optional(), confirmation: z.literal("approved") }).parse({
+    conversationId: formData.get("conversationId"), handoffId: formData.get("handoffId"), summary: formData.get("summary"), amount: formData.get("amount"), method: formData.get("method"), link: formData.get("link"), confirmation: formData.get("confirmation"),
+  });
+  const method = parsed.method === "link" ? null : await client.from("amanda_payment_methods").select("recipient").eq("method", parsed.method).maybeSingle();
+  const destination = parsed.method === "link" ? approvedPaymentUrl(parsed.link || "", paymentLinkHosts()) : method?.data?.recipient || null;
+  if (!destination) throw new Error("El medio de pago no está aprobado; verifica titularidad, divulgación y dominio del proveedor");
+  const result = await client.rpc("approve_amanda_manual_order", { p_conversation_id: parsed.conversationId, p_handoff_id: parsed.handoffId, p_summary: parsed.summary, p_amount_cop: parsed.amount, p_method: parsed.method, p_destination: destination, p_role: session.role });
+  if (result.error || !result.data) throw new Error("No se pudo aprobar el pedido; revisa que el caso siga pendiente y no haya cambiado");
+  revalidatePath(`/admin/conversaciones/${parsed.conversationId}`);
+}
+
+export async function verifyAmandaManualPayment(formData: FormData) {
+  const session = await requireAdmin("business");
+  const client = getSupabaseAdmin();
+  if (!client) throw new Error("Supabase no está disponible");
+  const parsed = z.object({ conversationId: z.string().uuid(), handoffId: z.string().uuid(), orderId: z.string().uuid(), transactionReference: z.string().trim().min(6).max(120), confirmation: z.literal("funds_verified") }).parse({
+    conversationId: formData.get("conversationId"), handoffId: formData.get("handoffId"), orderId: formData.get("orderId"), transactionReference: formData.get("transactionReference"), confirmation: formData.get("confirmation"),
+  });
+  const confirmed = await client.rpc("verify_amanda_manual_payment", { p_conversation_id: parsed.conversationId, p_handoff_id: parsed.handoffId, p_order_id: parsed.orderId, p_transaction_reference: parsed.transactionReference, p_role: session.role });
+  if (confirmed.error || !confirmed.data) throw new Error("No se pudo verificar: comprueba pedido, referencia, fondos recibidos y comprobante no utilizado");
+  revalidatePath(`/admin/conversaciones/${parsed.conversationId}`);
+}
+
+export async function approveAmandaShippingQuote(formData: FormData) {
+  const session = await requireAdmin("business");
+  const client = getSupabaseAdmin();
+  if (!client) throw new Error("Supabase no está disponible");
+  const parsed = z.object({
+    conversationId: z.string().uuid(), handoffId: z.string().uuid(), orderId: z.union([z.string().uuid(), z.literal("")]),
+    destination: z.string().trim().min(3).max(200), itemSummary: z.string().trim().min(3).max(400),
+    amount: z.string().regex(/^\d{1,7}$/).transform(Number).pipe(z.number().int().max(5_000_000)), deliveryEstimate: z.string().trim().min(3).max(160),
+    conditions: z.string().trim().min(3).max(300), validHours: z.coerce.number().int().min(1).max(72),
+    confirmation: z.literal("approved"),
+  }).parse({ conversationId: formData.get("conversationId"), handoffId: formData.get("handoffId"), orderId: formData.get("orderId"), destination: formData.get("destination"), itemSummary: formData.get("itemSummary"), amount: formData.get("amount"), deliveryEstimate: formData.get("deliveryEstimate"), conditions: formData.get("conditions"), validHours: formData.get("validHours"), confirmation: formData.get("confirmation") });
+  const result = await client.rpc("approve_amanda_shipping_quote", { p_conversation_id: parsed.conversationId, p_handoff_id: parsed.handoffId, p_order_id: parsed.orderId || null, p_destination: parsed.destination, p_item_summary: parsed.itemSummary, p_amount_cop: parsed.amount, p_delivery_estimate: parsed.deliveryEstimate, p_conditions: parsed.conditions, p_valid_hours: parsed.validHours, p_role: session.role });
+  if (result.error || !result.data) throw new Error("No se pudo aprobar la cotización: comprueba el caso, destino y pedido asociado");
+  revalidatePath(`/admin/conversaciones/${parsed.conversationId}`);
+}
+
 export async function cancelAmandaHandoff(formData: FormData) {
   const session = await requireAdmin("business");
   const client = getSupabaseAdmin();
@@ -535,6 +593,18 @@ export async function cancelAmandaHandoff(formData: FormData) {
   if (remaining.error) throw new Error("No se pudo comprobar el estado de Amanda");
   if (!remaining.count) await client.from("whatsapp_conversations").update({ updated_at: new Date().toISOString() }).eq("id", parsed.conversationId);
   await writeAudit(client, "amanda_handoff_cancelled", "amanda_handoff", parsed.id, session.role, { conversation_id: parsed.conversationId });
+  revalidatePath(`/admin/conversaciones/${parsed.conversationId}`);
+}
+
+export async function retryAmandaOperatorAlert(formData: FormData) {
+  const session = await requireAdmin("business");
+  const client = getSupabaseAdmin();
+  if (!client) throw new Error("Supabase no está disponible");
+  const parsed = z.object({ id: z.string().uuid(), conversationId: z.string().uuid(), confirmation: z.literal("checked") }).parse({
+    id: formData.get("id"), conversationId: formData.get("conversationId"), confirmation: formData.get("confirmation"),
+  });
+  const requeued = await client.rpc("requeue_amanda_operator_alert", { p_handoff_id: parsed.id, p_conversation_id: parsed.conversationId, p_role: session.role });
+  if (requeued.error || !requeued.data) throw new Error("No se pudo rearmar la alerta; comprueba el chat y que siga pendiente");
   revalidatePath(`/admin/conversaciones/${parsed.conversationId}`);
 }
 
