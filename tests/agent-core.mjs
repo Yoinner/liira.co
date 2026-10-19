@@ -16,6 +16,10 @@ test("una regla general requiere aprobación sin contacto privado ni enlace", ()
   assert.equal(safeGeneralRule("Para cotizar un envío, solicita primero la ciudad de destino."), "Para cotizar un envío, solicita primero la ciudad de destino.");
   assert.equal(safeGeneralRule("Escribe al 3016399833 para pagar."), null);
   assert.equal(safeGeneralRule("Ve a https://pago.example/cliente"), null);
+  assert.equal(safeGeneralRule("El envío a Cali se estima en $25.000 COP y 3 días."), null);
+  assert.equal(safeGeneralRule("El envío a Cali cuesta 25.000 COP aproximadamente."), null);
+  assert.equal(safeGeneralRule("El envío a Cali cuesta 25000 aproximadamente."), null);
+  assert.equal(safeGeneralRule("El envío a Cali demora 3 días."), null);
 });
 
 test("el validador no deja cotizar montos ni enlaces ajenos al catálogo", () => {
@@ -28,6 +32,13 @@ test("el validador no deja cotizar montos ni enlaces ajenos al catálogo", () =>
   assert.equal(supportedCatalogReply("Pago confirmado", products), false);
   assert.equal(supportedCatalogReply("Cuesta $45.000", [{ ...products[0], stock: 0 }]), false);
   assert.equal(supportedCatalogReply("Mira https://liira-co.vercel.app/producto/denario", [{ ...products[0], stock: 0 }]), false);
+  assert.equal(supportedCatalogReply("El envío a Cali se estima en $45.000 COP", products), false);
+  assert.equal(supportedCatalogReply("Serían 45 mil pesos de envío", products), false);
+  assert.equal(supportedCatalogReply("El envío tarda 3 días", products), false);
+  assert.equal(supportedCatalogReply("Serían 3 días para el envío", products), false);
+  assert.equal(supportedCatalogReply("Tu encargo personalizado vale $45.000", products), false);
+  assert.equal(supportedCatalogReply("Puedes pagar $45.000 por transferencia", products), false);
+  assert.equal(supportedCatalogReply("El denario cuesta $45.000; el envío lo cotizo para este pedido", products), true);
 });
 
 test("la guía humana no permite inventar enlace, monto ni confirmar pago", () => {

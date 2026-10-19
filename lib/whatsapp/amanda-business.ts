@@ -11,6 +11,10 @@ export const liiraAgentBusiness: AgentBusiness = {
 
 export function supportedCatalogReply(reply: string, products: Array<{ slug: string; price: number; sale_price: number | null; stock: number }>) {
   if (/\b(pago|transferencia)\s+(ya\s+)?(confirmado|aprobado|recibido)\b/iu.test(reply)) return false;
+  const variableCost = String.raw`(?:\$\s*[\d.,]+|\b\d[\d.,]*\s*(?:mil|pesos|COP))`;
+  const service = String.raw`(?:env[ií]o|flete|domicilio|entrega|personalizad[oa]|a medida|encargo|anticipo|abono|pago|transferencia|consignaci[oó]n)`;
+  if (new RegExp(`${service}[^.!?;\n]{0,70}${variableCost}|${variableCost}[^!?;\n]{0,70}(?:de|por|para)\\s+(?:el |la |tu )?${service}`, "iu").test(reply)) return false;
+  if (/(?:env[ií]o|entrega|llega|demora|tarda)[^.!?;\n]{0,60}\b\d+\s*(?:d[ií]as?|horas?|semanas?)\b|\b\d+\s*(?:d[ií]as?|horas?|semanas?)\b[^!?;\n]{0,50}(?:de|para)\s+(?:el |la )?(?:env[ií]o|entrega)/iu.test(reply)) return false;
   const allowedPrices = new Set(products.filter((product) => product.stock > 0).flatMap((product) => [product.price, product.sale_price].filter((price): price is number => typeof price === "number")));
   for (const match of reply.matchAll(/\$\s*([\d.,]+)/g)) {
     const amount = Number(match[1].replace(/\D/g, ""));

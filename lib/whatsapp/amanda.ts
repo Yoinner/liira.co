@@ -13,6 +13,7 @@ import { amandaTools } from "@/lib/whatsapp/amanda-tools";
 import { amandaEnabledForPhone } from "@/lib/whatsapp/amanda-rollout";
 import { paymentHandoffApproved } from "@/lib/whatsapp/payment-safety";
 import { hasAmbiguousShippingAmount, provisionalShippingReplyIsSafe, shippingQuoteGuidance, shippingQuoteIsCurrent, type ShippingQuote } from "@/lib/whatsapp/shipping-quote";
+import { safeGeneralRule } from "@/lib/agent-core/knowledge";
 import { downloadMetaMedia, sendMetaOperatorTemplate, sendMetaText } from "@/lib/whatsapp/meta";
 import { shouldRetryOperatorAlert } from "@/lib/whatsapp/operator-alert";
 
@@ -139,7 +140,7 @@ export async function contextFor(client: Client, conversationId: string) {
     client.from("whatsapp_conversations").select("*, customer:customers(id,name,city,preferences,transactional_consent)").eq("id", conversationId).maybeSingle(),
     client.from("whatsapp_messages").select("id,direction,message_type,body,media_caption,created_at,deleted_at").eq("conversation_id", conversationId).is("deleted_at", null).order("created_at", { ascending: false }).limit(40),
     client.from("products").select("name,slug,description,price,sale_price,stock,active,category:categories(name)").eq("active", true).order("featured", { ascending: false }),
-    client.from("amanda_handoffs").select("id,code,kind,status,question,operator_guidance,source_message_id,created_at").eq("conversation_id", conversationId).order("created_at", { ascending: false }).limit(12),
+    client.from("amanda_handoffs").select("id,code,kind,status,question,source_message_id,created_at").eq("conversation_id", conversationId).order("created_at", { ascending: false }).limit(12),
     client.from("amanda_knowledge").select("content,approved_at,version").eq("status", "approved").order("approved_at", { ascending: false }).limit(30),
   ]);
   if (conversation.error || !conversation.data || messages.error || products.error || handoffs.error || knowledge.error) return null;
@@ -148,7 +149,7 @@ export async function contextFor(client: Client, conversationId: string) {
     messages: [...(messages.data || [])].reverse(),
     products: (products.data || []).map((product) => ({ ...product, category: Array.isArray(product.category) ? product.category[0] || null : product.category })),
     handoffs: handoffs.data || [],
-    knowledge: knowledge.data || [],
+    knowledge: (knowledge.data || []).filter((rule) => safeGeneralRule(rule.content)),
   };
 }
 
