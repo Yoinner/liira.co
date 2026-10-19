@@ -67,6 +67,10 @@ export async function POST(request: Request) {
     const customerMessages: Array<{ conversationId: string; messageId: string; phone: string }> = [];
     const operatorMessageIds: string[] = [];
     for (const message of extractInboundMessages(payload)) {
+      if (!process.env.WHATSAPP_PHONE_NUMBER_ID || message.phoneNumberId !== process.env.WHATSAPP_PHONE_NUMBER_ID) {
+        console.warn("whatsapp_unexpected_phone_number_id", { message_id: message.messageId });
+        continue;
+      }
       if (isAmandaOperator(message.phone)) {
         const id = await persistAmandaOperatorInbound(message);
         if (id) operatorMessageIds.push(id);

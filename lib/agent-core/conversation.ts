@@ -17,6 +17,13 @@ export function operatorCaseCode(text: string | null | undefined) {
   return text?.match(/\b[A-Z]{2,8}-[A-F0-9]{6}\b/i)?.[0]?.toUpperCase() || null;
 }
 
+export function operatorCaseReference(body: string, quoted: { handoff_id: string | null; body: string | null } | null) {
+  const writtenCode = operatorCaseCode(body);
+  const quotedCode = operatorCaseCode(quoted?.body);
+  if (writtenCode && quotedCode && writtenCode !== quotedCode) return { handoffId: null, code: null, conflict: true };
+  return { handoffId: quoted?.handoff_id || null, code: writtenCode || quotedCode, conflict: false };
+}
+
 export function handoffNamedInMessage(text: string, cases: Array<{ id: string; customerName: string | null }>) {
   const normalize = (value: string) => value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z\s]/g, " ").replace(/\s+/g, " ").trim();
   const words = ` ${normalize(text)} `;

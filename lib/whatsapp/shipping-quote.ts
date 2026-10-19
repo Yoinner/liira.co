@@ -10,7 +10,13 @@ export type ShippingQuote = {
 };
 
 export function shippingQuoteIsCurrent(quote: ShippingQuote, lastInboundAt: string | null, now = Date.now()) {
-  return Boolean(lastInboundAt && Date.parse(quote.source_last_inbound_at) === Date.parse(lastInboundAt) && Date.parse(quote.expires_at) > now);
+  return Boolean(lastInboundAt && Date.parse(quote.source_last_inbound_at) <= Date.parse(lastInboundAt) && Date.parse(quote.expires_at) > now);
+}
+
+export function provisionalShippingReplyIsSafe(reply: string) {
+  const mentionsValue = /\$\s*[\d.,]+|\b\d+\s*(?:d[ií]as?|horas?)\b/iu.test(reply);
+  return !/\b(?:definitiv[oa]|confirmad[oa]|garantizad[oa])\b/iu.test(reply)
+    && (!mentionsValue || /\b(?:aproximad[oa]s?|estimad[oa]s?|referencial|sujeto a confirmaci[oó]n)\b/iu.test(reply));
 }
 
 export function shippingQuoteGuidance(quote: ShippingQuote) {

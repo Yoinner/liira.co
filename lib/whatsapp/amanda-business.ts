@@ -26,12 +26,12 @@ export function supportedCatalogReply(reply: string, products: Array<{ slug: str
   return true;
 }
 
-export function supportedOperatorReply(reply: string, guidance: string, paymentConfirmed: boolean, approvedUrls: string[] = []) {
+export function supportedOperatorReply(reply: string, guidance: string, paymentConfirmed: boolean, approvedUrls: string[] = [], allowBareAmounts = false) {
   for (const match of reply.matchAll(/https?:\/\/[^\s)]+/g)) {
     const url = match[0].replace(/[.,;!?]+$/, "");
     if (!guidance.includes(url) || !approvedUrls.includes(url)) return false;
   }
-  const approvedAmounts = new Set([...guidance.matchAll(/\$\s*([\d.,]+)/g)].map((match) => match[1].replace(/\D/g, "")));
+  const approvedAmounts = new Set([...guidance.matchAll(allowBareAmounts ? /(?:\$\s*)?\b([\d.,]*\d)\b/g : /\$\s*([\d.,]+)/g)].map((match) => match[1].replace(/\D/g, "")));
   for (const match of reply.matchAll(/\$\s*([\d.,]+)/g)) if (!approvedAmounts.has(match[1].replace(/\D/g, ""))) return false;
   const approvedNumbers = new Set([...guidance.matchAll(/\b\d[\d.,]*\b/g)].map((match) => match[0].replace(/\D/g, "")));
   for (const match of reply.matchAll(/\b\d[\d.,]*\b/g)) if (!approvedNumbers.has(match[0].replace(/\D/g, ""))) return false;

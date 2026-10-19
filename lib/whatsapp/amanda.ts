@@ -2,9 +2,9 @@ import "server-only";
 
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
-import { allowedAgentStage, conversationTranscript, handoffNamedInMessage, operatorCaseCode } from "@/lib/agent-core/conversation";
+import { allowedAgentStage, conversationTranscript, handoffNamedInMessage, operatorCaseReference } from "@/lib/agent-core/conversation";
 import { defaultAgentModel, gatewayAuth, gatewayJson, gatewayRetryDelay } from "@/lib/agent-core/gateway";
-import { amandaSystem, decisionSchema, guidanceSchema, operatorGuidanceSystem } from "@/lib/whatsapp/amanda-decision";
+import { amandaSystem, decisionSchema, guidanceSchema, operatorGuidanceSystem, operatorMatchSchema, operatorMessageSchema, quoteRelevanceSchema } from "@/lib/whatsapp/amanda-decision";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
 import { normalizePhone } from "@/lib/validation/crm";
 import { liiraAgentBusiness, supportedCatalogReply, supportedOperatorReply } from "@/lib/whatsapp/amanda-business";
@@ -12,7 +12,7 @@ import { gatewayBudget } from "@/lib/whatsapp/amanda-budget";
 import { amandaTools } from "@/lib/whatsapp/amanda-tools";
 import { amandaEnabledForPhone } from "@/lib/whatsapp/amanda-rollout";
 import { paymentHandoffApproved } from "@/lib/whatsapp/payment-safety";
-import { shippingQuoteGuidance, shippingQuoteIsCurrent, type ShippingQuote } from "@/lib/whatsapp/shipping-quote";
+import { provisionalShippingReplyIsSafe, shippingQuoteGuidance, shippingQuoteIsCurrent, type ShippingQuote } from "@/lib/whatsapp/shipping-quote";
 import { downloadMetaMedia, sendMetaOperatorTemplate, sendMetaText } from "@/lib/whatsapp/meta";
 import { shouldRetryOperatorAlert } from "@/lib/whatsapp/operator-alert";
 
@@ -59,10 +59,10 @@ async function notifyOperator(client: Client, handoff: { id: string; code: strin
     media_review: "envió una imagen o video que necesita revisión",
     payment_link: "está lista para recibir el enlace de pago",
     payment_verification: "envió el comprobante y necesita confirmación",
-    shipping_quote: "envió sus datos y necesita costo/tiempo de envío",
+    shipping_quote: "consulta costo y plazo de envío",
     general: "necesita tu criterio",
   };
-  const body = `Amanda necesita tu ayuda · ${handoff.code}\nCliente: ${customerName}\nMotivo: ${labels[handoff.kind] || labels.general}\n${handoff.question}\n\nResponde empezando por ${handoff.code} y luego tu recomendación.`;
+  const body = `Amanda necesita tu ayuda · ${handoff.code}\nCliente: ${customerName}\nMotivo: ${labels[handoff.kind] || labels.general}\n${handoff.question}\n\nPuedes responder directamente a este mensaje; no necesitas escribir el código.`;
   const claimed = await client.from("amanda_handoffs").update({ operator_delivery_status: "sending" }).eq("id", handoff.id).eq("operator_delivery_status", "queued").select("id").maybeSingle();
   if (claimed.error || !claimed.data) return;
   let sendAttempted = false;
@@ -71,8 +71,8 @@ async function notifyOperator(client: Client, handoff: { id: string; code: strin
     sendAttempted = true;
     const sent = open
       ? { messageId: await sendMetaText(operatorPhone(), body), templateName: null }
-      : await sendMetaOperatorTemplate(operatorPhone(), `${handoff.code} · ${customerName}: ${labels[handoff.kind] || labels.general}`.slice(0, 120));
-    const stored = await client.from("amanda_operator_messages").insert({ provider_message_id: sent.messageId, direction: "outbound", body: open ? body : `Alerta iniciada con plantilla: ${handoff.code}`, delivery_status: "accepted" });
+      : await sendMetaOperatorTemplate(operatorPhone(), `${handoff.code} · ${customerName}: ${handoff.question}`.slice(0, 120));
+    const stored = await client.from("amanda_operator_messages").insert({ provider_message_id: sent.messageId, direction: "outbound", handoff_id: handoff.id, body: open ? body : `Alerta iniciada con plantilla: ${handoff.code}`, delivery_status: "accepted" });
     if (stored.error) throw new Error("operator_alert_store_failed");
     const updated = await client.from("amanda_handoffs").update({ operator_delivery_status: "sent" }).eq("id", handoff.id);
     if (updated.error) throw new Error("operator_alert_state_failed");
@@ -90,6 +90,34 @@ async function createHandoff(client: Client, conversation: Record<string, unknow
       await notifyOperator(client, pending.data, customer?.name || String(conversation.normalized_phone));
     }
     return pending.data;
+  }
+  if (kind === "shipping_quote") {
+    const open = await client.from("amanda_handoffs").select("id,code,kind,question,operator_delivery_status,application_status")
+      .eq("conversation_id", conversation.id).eq("kind", "shipping_quote").eq("status", "pending").order("created_at", { ascending: false }).limit(2);
+    if (open.error) throw new Error("shipping_handoff_lookup_failed");
+    if (open.data?.length === 1 && open.data[0].application_status === "pending") {
+      const existing = open.data[0];
+      const quote = await client.from("amanda_shipping_quotes").select("id").eq("handoff_id", existing.id).maybeSingle();
+      if (quote.error) throw new Error("shipping_quote_lookup_failed");
+      if (!quote.data) {
+        if (existing.question !== question) {
+          const updated = await client.from("amanda_handoffs").update({ question, operator_delivery_status: "queued", guidance_due_at: null, guidance_error_code: "shipping_context_updated" })
+            .eq("id", existing.id).eq("status", "pending").eq("question", existing.question).select("id,code,kind,question,operator_delivery_status").maybeSingle();
+          if (updated.error) throw new Error("shipping_handoff_update_failed");
+          if (updated.data) {
+            const customer = conversation.customer as { name?: string } | null;
+            await notifyOperator(client, updated.data, customer?.name || String(conversation.normalized_phone));
+            return updated.data;
+          }
+        } else {
+          if (existing.operator_delivery_status !== "sent") {
+            const customer = conversation.customer as { name?: string } | null;
+            await notifyOperator(client, existing, customer?.name || String(conversation.normalized_phone));
+          }
+          return existing;
+        }
+      }
+    }
   }
   const id = randomUUID();
   const code = `LIR-${id.slice(0, 6).toUpperCase()}`;
@@ -179,7 +207,8 @@ export async function runAmandaForInbound(conversationId: string, oidcToken?: st
     if (run.error) throw new Error("run_store_failed");
     if (source.message_type === "image" || source.message_type === "video") {
       const kind = context.conversation.agent_stage === "awaiting_payment_proof" ? "payment_verification" : "media_review";
-      const question = kind === "payment_verification" ? "Revisa el archivo como posible comprobante; responde «pago confirmado» solo tras verificar la transacción por un canal autorizado." : `El cliente envió ${source.message_type === "image" ? "una imagen" : "un video"}${source.media_caption ? ` con texto «${source.media_caption.slice(0, 180)}»` : ""}. Revisa el archivo y el contexto del chat; dime qué respuesta o decisión comercial corresponde.`;
+      const previousAsk = [...context.messages].reverse().find((item) => item.direction === "inbound" && item.id !== source.id && item.body)?.body;
+      const question = kind === "payment_verification" ? "Revisa el archivo como posible comprobante; responde «pago confirmado» solo tras verificar la transacción por un canal autorizado." : `El cliente envió ${source.message_type === "image" ? "una imagen" : "un video"}${source.media_caption ? ` con texto «${source.media_caption.slice(0, 180)}»` : ""}. ${previousAsk ? `Última consulta textual: «${previousAsk.slice(0, 250)}». ` : ""}Revisa el archivo en el panel y confirma qué podemos responder; Amanda no ha inferido el contenido visual.`;
       await createHandoff(client, context.conversation, source.id, kind, question);
       sendAttempted = true;
       await client.from("amanda_agent_runs").update({ phase: "sending" }).eq("source_message_id", source.id);
@@ -284,9 +313,32 @@ async function applyOperatorGuidance(client: Client, handoffId: string, oidcToke
       : null;
     if (quoteResult?.error) throw new Error("shipping_quote_lookup_failed");
     const quote = (quoteResult?.data || null) as ShippingQuote | null;
-    if (handoff.kind === "shipping_quote" && !quote) {
-      await client.from("amanda_handoffs").update({ application_status: "pending", guidance_due_at: null, guidance_error_code: "shipping_quote_approval_required" }).eq("id", handoff.id).eq("application_status", "processing");
-      return;
+    if (handoff.kind === "shipping_quote") {
+      const sourceInContext = context.messages.find((item) => item.id === handoff.source_message_id);
+      const sourceLookup = sourceInContext ? null : await client.from("whatsapp_messages").select("created_at").eq("id", handoff.source_message_id).eq("conversation_id", handoff.conversation_id).maybeSingle();
+      const sourceAt = sourceInContext?.created_at || sourceLookup?.data?.created_at;
+      if (sourceLookup?.error || !sourceAt) {
+        await client.from("amanda_handoffs").update({ application_status: "pending", guidance_due_at: null, guidance_error_code: "shipping_context_unverified" }).eq("id", handoff.id).eq("application_status", "processing");
+        return;
+      }
+      const laterLookup = sourceInContext ? null : await client.from("whatsapp_messages").select("body,media_caption,message_type,created_at,direction").eq("conversation_id", handoff.conversation_id).eq("direction", "inbound").is("deleted_at", null).gt("created_at", sourceAt).order("created_at", { ascending: true }).limit(31);
+      if (laterLookup?.error || (laterLookup?.data?.length || 0) > 30) {
+        await client.from("amanda_handoffs").update({ application_status: "pending", guidance_due_at: null, guidance_error_code: "shipping_context_unverified" }).eq("id", handoff.id).eq("application_status", "processing");
+        return;
+      }
+      const laterMessages = laterLookup?.data || context.messages.filter((item) => item.direction === "inbound" && Date.parse(item.created_at) > Date.parse(sourceAt));
+      if (laterMessages.length) {
+      const auth = gatewayAuth(oidcToken);
+      const relevance = await gatewayJson({ schema: quoteRelevanceSchema, system: "Determina si la orientación de envío sigue aplicando a la solicitud tras mensajes posteriores del cliente. Un saludo, «Ok», «gracias» o «quedo pendiente» NO la invalida. Un cambio de producto/destino, cancelación o petición de detener el proceso SÍ la invalida. Si no hay información suficiente, responde current=false. Devuelve JSON con current y reason.", user: JSON.stringify({ solicitud: handoff.question, orientacion: handoff.operator_guidance, cotizacion_aprobada: quote ? { producto: quote.item_summary, destino: quote.destination } : null, mensajes_posteriores: laterMessages }), token: auth.token, authMode: auth.authMode, model: process.env.AI_GATEWAY_MODEL || defaultAgentModel, budget: gatewayBudget(client, "operator") });
+      if (!relevance.value) {
+        await client.from("amanda_handoffs").update({ application_status: "pending", guidance_due_at: null, guidance_error_code: relevance.errorCode || "quote_relevance_unverified" }).eq("id", handoff.id).eq("application_status", "processing");
+        return;
+      }
+      if (!relevance.value.current) {
+        await client.from("amanda_handoffs").update({ status: "resolved", application_status: "not_applied", guidance_due_at: null, guidance_error_code: "shipping_quote_stale", resolved_at: new Date().toISOString() }).eq("id", handoff.id).eq("application_status", "processing");
+        return;
+      }
+      }
     }
     const latestOrder = quote ? await client.from("amanda_manual_orders").select("id,status").eq("conversation_id", handoff.conversation_id).order("created_at", { ascending: false }).limit(1).maybeSingle() : null;
     if (latestOrder?.error) throw new Error("shipping_order_lookup_failed");
@@ -301,7 +353,9 @@ async function applyOperatorGuidance(client: Client, handoffId: string, oidcToke
         ? `Pago verificado por una persona autorizada para el pedido ${order.reference} por $${order.amount_cop.toLocaleString("es-CO")}. Agradece y solicita solo los datos de envío faltantes; costo y plazo requieren cotización.`
         : quote
           ? shippingQuoteGuidance(quote)
-        : handoff.operator_guidance;
+        : handoff.kind === "shipping_quote"
+          ? `Orientación preliminar, NO cotización confirmada: ${handoff.operator_guidance}. Si indicas monto o plazo, aclara que es aproximado y sujeto a confirmación para el destino y pedido actuales.`
+          : handoff.operator_guidance;
     const system = operatorGuidanceSystem(liiraAgentBusiness, confirmedPayment);
     const auth = gatewayAuth(oidcToken);
     const drafted = await gatewayJson({ schema: guidanceSchema, system, user: JSON.stringify({ motivo: handoff.question, recomendacion_daniela: guidance, estado_actual: conversation.agent_stage, otros_pendientes: context.handoffs, conversacion: conversationTranscript(context.messages) }), token: auth.token, authMode: auth.authMode, model: process.env.AI_GATEWAY_MODEL || defaultAgentModel, budget: gatewayBudget(client, "operator") });
@@ -331,7 +385,8 @@ async function applyOperatorGuidance(client: Client, handoffId: string, oidcToke
     }
     const base = liiraAgentBusiness.website.replace(/\/catalogo$/, "");
     const approvedUrls = [liiraAgentBusiness.website, `${base}/politicas/envios-y-cambios`, ...context.products.map((product) => `${base}/producto/${product.slug}`), ...(handoff.kind === "payment_link" && order?.payment_method === "link" ? [order.payment_destination] : [])];
-    if (!drafted.value.reply || !supportedOperatorReply(drafted.value.reply, guidance, confirmedPayment, approvedUrls)) throw new Error("unsupported_operator_claim");
+    if (!drafted.value.reply || !supportedOperatorReply(drafted.value.reply, guidance, confirmedPayment, approvedUrls, handoff.kind === "shipping_quote" && !quote)
+      || (handoff.kind === "shipping_quote" && !quote && !provisionalShippingReplyIsSafe(drafted.value.reply))) throw new Error("unsupported_operator_claim");
     await client.from("amanda_handoffs").update({ application_status: "sending", guidance_due_at: null }).eq("id", handoff.id).eq("application_status", "processing");
     try {
       await storeOutbound(client, conversation, drafted.value.reply, "amanda");
@@ -351,43 +406,61 @@ async function applyOperatorGuidance(client: Client, handoffId: string, oidcToke
   }
 }
 
-export async function persistAmandaOperatorInbound(message: { messageId: string; providerTimestamp: string | null; text: string | null; replyToMessageId?: string | null }) {
+export async function persistAmandaOperatorInbound(message: { messageId: string; providerTimestamp: string | null; text: string | null; replyToMessageId?: string | null; phoneNumberId: string }) {
   const client = getSupabaseAdmin();
   if (!client) throw new Error("database_unavailable");
   const seconds = Number(message.providerTimestamp);
   const timestamp = message.providerTimestamp && Number.isFinite(seconds) && seconds > 0 && seconds < 4_102_444_800 ? new Date(seconds * 1000).toISOString() : null;
-  const stored = await client.from("amanda_operator_messages").insert({ provider_message_id: message.messageId, direction: "inbound", body: message.text, provider_timestamp: timestamp, reply_to_provider_message_id: message.replyToMessageId || null, processed_at: null }).select("id").single();
+  const stored = await client.from("amanda_operator_messages").insert({ provider_message_id: message.messageId, direction: "inbound", body: message.text, provider_timestamp: timestamp, reply_to_provider_message_id: message.replyToMessageId || null, phone_number_id: message.phoneNumberId, processed_at: null }).select("id").single();
   if (stored.error?.code === "23505") return null;
   if (stored.error || !stored.data) throw new Error("operator_inbound_persist_failed");
   return stored.data.id as string;
 }
 
+async function sendOperatorDetails(client: Client, handoff: Record<string, unknown>, customerName: string) {
+  const messages = await client.from("whatsapp_messages").select("body,media_caption,message_type").eq("conversation_id", handoff.conversation_id).eq("direction", "inbound").is("deleted_at", null).order("created_at", { ascending: false }).limit(5);
+  if (messages.error) throw new Error("operator_details_unavailable");
+  const recent = [...(messages.data || [])].reverse().map((item) => item.body || item.media_caption || `[${item.message_type}]`);
+  const body = `Solicitud ${handoff.code} · ${customerName}\n${String(handoff.question).slice(0, 750)}\n${recent.length ? `Mensajes recientes del cliente:\n${recent.map((item) => `• ${item.slice(0, 120)}`).join("\n")}\n` : ""}Responde a este mensaje con tu orientación. Si necesitas barrio o dirección exacta para confirmar un envío, indícalo; no supongas datos no proporcionados.`;
+  const providerMessageId = await sendMetaText(operatorPhone(), body);
+  const saved = await client.from("amanda_operator_messages").insert({ provider_message_id: providerMessageId, direction: "outbound", handoff_id: handoff.id, body, delivery_status: "accepted" });
+  if (saved.error) throw new Error("operator_details_send_unconfirmed");
+}
+
 export async function handleAmandaOperatorInbound(messageId: string, oidcToken?: string | null) {
   const client = getSupabaseAdmin();
   if (!client || process.env.AMANDA_ENABLED !== "true") return;
-  const leaseUntil = new Date(Date.now() + 90_000).toISOString();
+  const leaseUntil = new Date(Date.now() + 180_000).toISOString();
   const claimed = await client.from("amanda_operator_messages").update({ processing_until: leaseUntil, processing_error_code: null })
     .eq("id", messageId).eq("direction", "inbound").is("processed_at", null)
     .or(`processing_until.is.null,processing_until.lt.${new Date().toISOString()}`)
     .select("id,body,reply_to_provider_message_id").maybeSingle();
   if (claimed.error || !claimed.data) return;
   const message = claimed.data;
+  let detailSendAttempted = false;
   try {
     if (!message.body) {
       const empty = await client.from("amanda_operator_messages").update({ processed_at: new Date().toISOString(), processing_until: null }).eq("id", messageId).eq("processing_until", leaseUntil);
       if (empty.error) throw new Error("operator_inbound_finish_failed");
       return;
     }
-  const quoted = message.reply_to_provider_message_id ? await client.from("amanda_operator_messages").select("body").eq("provider_message_id", message.reply_to_provider_message_id).maybeSingle() : null;
+  const quoted = message.reply_to_provider_message_id ? await client.from("amanda_operator_messages").select("body,handoff_id").eq("provider_message_id", message.reply_to_provider_message_id).maybeSingle() : null;
   if (quoted?.error) throw new Error("quoted_operator_message_unavailable");
-  const code = operatorCaseCode(message.body) || operatorCaseCode(quoted?.data?.body);
-  const named = !code ? await client.from("amanda_handoffs").select("id,conversation:whatsapp_conversations(customer:customers(name))").eq("status", "pending").order("created_at", { ascending: false }).limit(100) : null;
+  const reference = operatorCaseReference(message.body, quoted?.data || null);
+  const named = !reference.handoffId && !reference.code && !reference.conflict ? await client.from("amanda_handoffs").select("id,code,kind,question,created_at,conversation:whatsapp_conversations(customer:customers(name))").eq("status", "pending").order("created_at", { ascending: false }).limit(100) : null;
   if (named?.error) throw new Error("operator_case_lookup_failed");
   const namedId = !named?.error && named?.data ? handoffNamedInMessage(message.body, named.data.map((item) => {
     const conversation = item.conversation as unknown as { customer?: { name?: string } } | null;
     return { id: item.id, customerName: conversation?.customer?.name || null };
   })) : null;
-  const handoffResult = code || namedId ? await client.from("amanda_handoffs").select("*, conversation:whatsapp_conversations(*, customer:customers(name))").eq("status", "pending").eq(code ? "code" : "id", code || namedId).maybeSingle() : null;
+  let caseId = reference.handoffId || namedId;
+  if (!reference.conflict && !reference.code && !caseId && named?.data?.length) {
+    const candidates = named.data.slice(0, 30).map((item) => ({ id: item.id, code: item.code, kind: item.kind, question: item.question, created_at: item.created_at, customer: (item.conversation as unknown as { customer?: { name?: string } } | null)?.customer?.name || null }));
+    const auth = gatewayAuth(oidcToken);
+    const matched = await gatewayJson({ schema: operatorMatchSchema, system: "Identifica una solicitud ABIERTA a partir del mensaje de la operadora y los datos del caso. Devuelve case_id solo si existe una correspondencia inequívoca por tema, producto, destino o cliente; con dos casos plausibles o datos insuficientes devuelve null. Nunca adivines un cliente por su nombre compartido. Devuelve JSON con case_id.", user: JSON.stringify({ mensaje: message.body, solicitudes: candidates }), token: auth.token, authMode: auth.authMode, model: process.env.AI_GATEWAY_MODEL || defaultAgentModel, budget: gatewayBudget(client, "operator") });
+    if (candidates.some((item) => item.id === matched.value?.case_id)) caseId = matched.value!.case_id;
+  }
+  const handoffResult = !reference.conflict && (reference.code || caseId) ? await client.from("amanda_handoffs").select("*, conversation:whatsapp_conversations(*, customer:customers(name))").eq("status", "pending").eq(reference.code && !reference.handoffId ? "code" : "id", reference.code && !reference.handoffId ? reference.code : caseId).maybeSingle() : null;
   if (handoffResult?.error) throw new Error("operator_case_lookup_failed");
   const handoff = handoffResult?.data || null;
   if (!handoff) {
@@ -398,9 +471,24 @@ export async function handleAmandaOperatorInbound(messageId: string, oidcToken?:
       const conversation = item.conversation as unknown as { normalized_phone?: string; customer?: { name?: string } } | null;
       await notifyOperator(client, item, conversation?.customer?.name || conversation?.normalized_phone || "Cliente");
     }
-    const body = "Para aplicar tu orientación a la conversación correcta, responde a la alerta o empieza tu mensaje con su código LIR-XXXXXX.";
+    const body = "No pude identificar con seguridad la consulta. ¿De qué cliente y tema se trata? También puedes responder directamente al aviso o al detalle de esa solicitud.";
     const providerMessageId = await sendMetaText(operatorPhone(), body);
     await client.from("amanda_operator_messages").insert({ provider_message_id: providerMessageId, direction: "outbound", body, delivery_status: "accepted" });
+    return;
+  }
+  const customer = handoff.conversation?.customer;
+  const customerName = customer?.name || String(handoff.conversation?.normalized_phone || "Cliente");
+  const auth = gatewayAuth(oidcToken);
+  const intent = await gatewayJson({ schema: operatorMessageSchema, system: "Clasifica el mensaje de la operadora de Liira. 'details' si pregunta por más contexto o datos del caso; 'guidance' si aporta una orientación, decisión, precio, plazo o instrucción para responder al cliente. No confundas una pregunta sobre el caso con una cotización. Devuelve JSON con action.", user: JSON.stringify({ solicitud: handoff.question, respuesta: message.body, mensaje_citado: quoted?.data?.body || null }), token: auth.token, authMode: auth.authMode, model: process.env.AI_GATEWAY_MODEL || defaultAgentModel, budget: gatewayBudget(client, "operator") });
+  if (!intent.value) {
+    await client.from("amanda_operator_messages").update({ processing_until: new Date(Date.now() + 300_000).toISOString(), processing_error_code: intent.errorCode || "operator_intent_unavailable" }).eq("id", messageId).eq("processing_until", leaseUntil).is("processed_at", null);
+    return;
+  }
+  if (intent.value.action === "details") {
+    detailSendAttempted = true;
+    await sendOperatorDetails(client, handoff, customerName);
+    const detailed = await client.from("amanda_operator_messages").update({ processed_at: new Date().toISOString(), processing_until: null, processing_error_code: intent.errorCode || null, handoff_id: handoff.id }).eq("id", messageId).eq("processing_until", leaseUntil);
+    if (detailed.error) throw new Error("operator_inbound_finish_failed");
     return;
   }
   const guidance = message.body.replace(new RegExp(handoff.code, "i"), "").replace(/^\s*[:\-]\s*/, "").trim();
@@ -411,11 +499,14 @@ export async function handleAmandaOperatorInbound(messageId: string, oidcToken?:
   }
   const updated = await client.from("amanda_handoffs").update({ operator_guidance: guidance, guidance_due_at: new Date().toISOString(), guidance_error_code: null }).eq("id", handoff.id).eq("status", "pending").select("id").maybeSingle();
   if (updated.error || !updated.data) throw new Error("operator_guidance_store_failed");
-  const finished = await client.from("amanda_operator_messages").update({ processed_at: new Date().toISOString(), processing_until: null }).eq("id", messageId).eq("processing_until", leaseUntil);
+  const finished = await client.from("amanda_operator_messages").update({ processed_at: new Date().toISOString(), processing_until: null, handoff_id: handoff.id }).eq("id", messageId).eq("processing_until", leaseUntil);
   if (finished.error) throw new Error("operator_inbound_finish_failed");
   await applyOperatorGuidance(client, handoff.id, oidcToken);
   } catch {
-    await client.from("amanda_operator_messages").update({ processing_until: new Date(Date.now() + 60_000).toISOString(), processing_error_code: "processing_failed" }).eq("id", messageId).eq("processing_until", leaseUntil).is("processed_at", null);
+    await client.from("amanda_operator_messages").update(detailSendAttempted
+      ? { processed_at: new Date().toISOString(), processing_until: null, processing_error_code: "detail_send_unconfirmed" }
+      : { processing_until: new Date(Date.now() + 60_000).toISOString(), processing_error_code: "processing_failed" }
+    ).eq("id", messageId).eq("processing_until", leaseUntil).is("processed_at", null);
   }
 }
 

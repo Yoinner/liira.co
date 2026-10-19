@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { allowedAgentStage, conversationTranscript, handoffNamedInMessage, operatorCaseCode } from "../lib/agent-core/conversation.ts";
+import { allowedAgentStage, conversationTranscript, handoffNamedInMessage, operatorCaseCode, operatorCaseReference } from "../lib/agent-core/conversation.ts";
 import { supportedCatalogReply, supportedOperatorReply } from "../lib/whatsapp/amanda-business.ts";
 import { safeGeneralRule } from "../lib/agent-core/knowledge.ts";
 
@@ -40,6 +40,8 @@ test("la guía humana no permite inventar enlace, monto ni confirmar pago", () =
   assert.equal(supportedOperatorReply("Paga en https://otro.example", guidance, false), false);
   assert.equal(supportedOperatorReply("Paga en http://pago.example/orden-1", guidance, false), false);
   assert.equal(supportedOperatorReply("Pago confirmado", guidance, false), false);
+  assert.equal(supportedOperatorReply("El envío sería aproximadamente $15.000", "para Bucaramanga cuesta 15.000", false, [], true), true);
+  assert.equal(supportedOperatorReply("El envío sería aproximadamente $20.000", "para Bucaramanga cuesta 15.000", false, [], true), false);
 });
 
 test("la referencia del caso identifica orientaciones de la operadora", () => {
@@ -47,6 +49,9 @@ test("la referencia del caso identifica orientaciones de la operadora", () => {
   assert.equal(handoffNamedInMessage("Para Yoinner, el envío depende de la ciudad", [{ id: "1", customerName: "Yoinner Gándara" }]), "1");
   assert.equal(handoffNamedInMessage("Para Yoinner, cotiza primero", [{ id: "1", customerName: "Yoinner Gándara" }, { id: "2", customerName: "Yoinner Gándara" }]), null);
   assert.equal(handoffNamedInMessage("Mañana te digo", [{ id: "1", customerName: "Ana" }]), null);
+  assert.deepEqual(operatorCaseReference("Qué precio tiene para Bucaramanga", { handoff_id: "case-1", body: "Alerta iniciada con plantilla: LIR-A1B2C3" }), { handoffId: "case-1", code: "LIR-A1B2C3", conflict: false });
+  assert.deepEqual(operatorCaseReference("Unos $40.000, falta dirección", { handoff_id: "case-1", body: "Solicitud LIR-A1B2C3 · Yoinner" }), { handoffId: "case-1", code: "LIR-A1B2C3", conflict: false });
+  assert.deepEqual(operatorCaseReference("LIR-AAAAAA consulta", { handoff_id: "case-1", body: "Solicitud LIR-BBBBBB" }), { handoffId: null, code: null, conflict: true });
 });
 
 test("un modelo no puede declarar por sí mismo pago o venta confirmados", () => {
