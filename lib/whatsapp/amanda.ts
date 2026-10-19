@@ -12,7 +12,7 @@ import { gatewayBudget } from "@/lib/whatsapp/amanda-budget";
 import { amandaTools } from "@/lib/whatsapp/amanda-tools";
 import { amandaEnabledForPhone } from "@/lib/whatsapp/amanda-rollout";
 import { paymentHandoffApproved } from "@/lib/whatsapp/payment-safety";
-import { provisionalShippingReplyIsSafe, shippingQuoteGuidance, shippingQuoteIsCurrent, type ShippingQuote } from "@/lib/whatsapp/shipping-quote";
+import { hasAmbiguousShippingAmount, provisionalShippingReplyIsSafe, shippingQuoteGuidance, shippingQuoteIsCurrent, type ShippingQuote } from "@/lib/whatsapp/shipping-quote";
 import { downloadMetaMedia, sendMetaOperatorTemplate, sendMetaText } from "@/lib/whatsapp/meta";
 import { shouldRetryOperatorAlert } from "@/lib/whatsapp/operator-alert";
 
@@ -101,7 +101,7 @@ async function createHandoff(client: Client, conversation: Record<string, unknow
       if (quote.error) throw new Error("shipping_quote_lookup_failed");
       if (!quote.data) {
         if (existing.question !== question) {
-          const updated = await client.from("amanda_handoffs").update({ question, operator_delivery_status: "queued", guidance_due_at: null, guidance_error_code: "shipping_context_updated" })
+          const updated = await client.from("amanda_handoffs").update({ question, source_message_id: sourceMessageId, operator_guidance: null, guidance_attempt_count: 0, operator_delivery_status: "queued", guidance_due_at: null, guidance_error_code: "shipping_context_updated" })
             .eq("id", existing.id).eq("status", "pending").eq("question", existing.question).select("id,code,kind,question,operator_delivery_status").maybeSingle();
           if (updated.error) throw new Error("shipping_handoff_update_failed");
           if (updated.data) {
@@ -497,7 +497,17 @@ export async function handleAmandaOperatorInbound(messageId: string, oidcToken?:
     if (empty.error) throw new Error("operator_inbound_finish_failed");
     return;
   }
-  const updated = await client.from("amanda_handoffs").update({ operator_guidance: guidance, guidance_due_at: new Date().toISOString(), guidance_error_code: null }).eq("id", handoff.id).eq("status", "pending").select("id").maybeSingle();
+  if (handoff.kind === "shipping_quote" && hasAmbiguousShippingAmount(guidance)) {
+    const queued = await client.from("amanda_handoffs").update({ operator_guidance: null, guidance_due_at: null, guidance_attempt_count: 0, guidance_error_code: "ambiguous_amount", operator_delivery_status: "queued" })
+      .eq("id", handoff.id).eq("status", "pending").eq("application_status", "pending").select("id").maybeSingle();
+    if (queued.error || !queued.data) throw new Error("operator_clarification_queue_failed");
+    const marked = await client.from("amanda_operator_messages").update({ processed_at: new Date().toISOString(), processing_until: null, processing_error_code: "ambiguous_amount", handoff_id: handoff.id }).eq("id", messageId).eq("processing_until", leaseUntil);
+    if (marked.error) throw new Error("operator_inbound_finish_failed");
+    await notifyOperator(client, { id: handoff.id, code: handoff.code, kind: handoff.kind, question: `${handoff.question}\nLa cifra de tu último mensaje puede leerse de más de una forma. ¿Me confirmas el valor correcto en COP y si es estimado o definitivo?` }, customerName);
+    return;
+  }
+  const updated = await client.from("amanda_handoffs").update({ operator_guidance: guidance, guidance_due_at: new Date().toISOString(), guidance_attempt_count: 0, guidance_error_code: null })
+    .eq("id", handoff.id).eq("status", "pending").eq("application_status", "pending").select("id").maybeSingle();
   if (updated.error || !updated.data) throw new Error("operator_guidance_store_failed");
   const finished = await client.from("amanda_operator_messages").update({ processed_at: new Date().toISOString(), processing_until: null, handoff_id: handoff.id }).eq("id", messageId).eq("processing_until", leaseUntil);
   if (finished.error) throw new Error("operator_inbound_finish_failed");
