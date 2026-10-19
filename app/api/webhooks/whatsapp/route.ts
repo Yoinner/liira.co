@@ -2,6 +2,7 @@ import { timingSafeEqual } from "node:crypto";
 import { after } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
 import { analyzeWhatsAppConversation } from "@/lib/whatsapp/classify";
+import { amandaEnabledForPhone } from "@/lib/whatsapp/amanda-rollout";
 import { handleAmandaOperatorInbound, isAmandaOperator, persistAmandaOperatorInbound, persistWhatsAppMedia, runAmandaForInbound } from "@/lib/whatsapp/amanda";
 import { extractInboundMessages, extractMessageStatuses, verifyMetaSignature, type WhatsAppInboundMessage } from "@/lib/whatsapp/webhook";
 
@@ -27,7 +28,7 @@ async function persistInboundMessage(message: WhatsAppInboundMessage) {
   });
   if (result.error || !result.data?.[0]) throw new Error("inbound_persist_failed");
   const row = result.data[0];
-  return row.inserted ? { conversationId: row.conversation_id as string, messageId: row.message_id as string } : null;
+  return row.inserted ? { conversationId: row.conversation_id as string, messageId: row.message_id as string, phone: message.phone } : null;
 }
 
 export async function GET(request: Request) {
@@ -63,7 +64,7 @@ export async function POST(request: Request) {
   }
 
   try {
-    const customerMessages: Array<{ conversationId: string; messageId: string }> = [];
+    const customerMessages: Array<{ conversationId: string; messageId: string; phone: string }> = [];
     const operatorMessageIds: string[] = [];
     for (const message of extractInboundMessages(payload)) {
       if (isAmandaOperator(message.phone)) {
@@ -91,8 +92,8 @@ export async function POST(request: Request) {
         await persistWhatsAppMedia(item.messageId);
       }
       if (customerMessages.length) await new Promise((resolve) => setTimeout(resolve, 3_200));
-      for (const conversationId of new Set(customerMessages.map((item) => item.conversationId))) {
-        if (process.env.AMANDA_ENABLED === "true") await runAmandaForInbound(conversationId, oidcToken);
+      for (const { conversationId, phone } of new Map(customerMessages.map((item) => [item.conversationId, item])).values()) {
+        if (amandaEnabledForPhone(phone)) await runAmandaForInbound(conversationId, oidcToken);
         else await analyzeWhatsAppConversation(conversationId, oidcToken);
       }
     });

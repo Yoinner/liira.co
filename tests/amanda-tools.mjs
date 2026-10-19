@@ -17,8 +17,9 @@ test("busca atributos del mismo producto aunque no sean una frase contigua", asy
   const search = amandaTools({ products, available: true }, []).searchProducts.execute;
   const collar = await search({ query: "collar blanco" });
   const rosario = await search({ query: "rosario rosado" });
-  assert.equal(collar.total, 1);
-  assert.equal(collar.products[0].available, false);
+  assert.equal(collar.total, 0);
   assert.equal(rosario.total, 1);
   assert.equal(rosario.products[0].available, true);
+  const details = await amandaTools({ products, available: true }, []).getProductDetails.execute({ slug: "collar" });
+  assert.equal(details.available, false);
 });

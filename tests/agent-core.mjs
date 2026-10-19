@@ -19,13 +19,15 @@ test("una regla general requiere aprobación sin contacto privado ni enlace", ()
 });
 
 test("el validador no deja cotizar montos ni enlaces ajenos al catálogo", () => {
-  const products = [{ slug: "denario", price: 45000, sale_price: null }];
+  const products = [{ slug: "denario", price: 45000, sale_price: null, stock: 1 }];
   assert.equal(supportedCatalogReply("Cuesta $45.000: https://liira-co.vercel.app/producto/denario", products), true);
   assert.equal(supportedCatalogReply("Mira https://liira-co.vercel.app/producto/denario.", products), true);
   assert.equal(supportedCatalogReply("Cuesta $48.000", products), false);
   assert.equal(supportedCatalogReply("Paga en https://otro-sitio.co/checkout", products), false);
   assert.equal(supportedCatalogReply("Paga en https://liira-co.vercel.app/pago/orden-inventada", products), false);
   assert.equal(supportedCatalogReply("Pago confirmado", products), false);
+  assert.equal(supportedCatalogReply("Cuesta $45.000", [{ ...products[0], stock: 0 }]), false);
+  assert.equal(supportedCatalogReply("Mira https://liira-co.vercel.app/producto/denario", [{ ...products[0], stock: 0 }]), false);
 });
 
 test("la guía humana no permite inventar enlace, monto ni confirmar pago", () => {

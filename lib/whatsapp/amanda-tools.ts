@@ -25,13 +25,14 @@ export function amandaTools(catalog: CatalogSnapshot, requests: PendingRequest[]
   const find = (slug: string) => catalog.products.find((product) => product.slug === slug);
   return {
     searchProducts: {
-      description: "Busca accesorios activos del catálogo público. Úsala antes de afirmar disponibilidad, precio u opciones concretas.",
+      description: "Busca solo accesorios con unidades disponibles. Úsala antes de ofrecer piezas, precio u opciones concretas.",
       parameters: z.object({ query: z.string().trim().max(80).default("") }),
       execute: async (input) => {
         if (!catalog.available) return { error: "catalog_unavailable" };
         const query = (input as { query: string }).query.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
         const terms = query.match(/[a-z0-9]+/g) || [];
         const matches = catalog.products.filter((product) => {
+          if (product.stock <= 0) return false;
           const text = `${product.name} ${product.description || ""} ${product.category?.name || ""}`.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
           return terms.every((term) => text.includes(term));
         });
