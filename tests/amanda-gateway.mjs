@@ -60,6 +60,25 @@ test("presupuesto compartido bloquea antes de consumir Gateway y registra cada r
   assert.equal(requests, 1);
 });
 
+test("una conversación puede completar la cuarta ronda sin exceder su reserva", async () => {
+  let reservations = 0;
+  let requests = 0;
+  const result = await gatewayJson({
+    ...base,
+    tools: { searchProducts: { description: "Busca productos", parameters: z.object({}), execute: async () => ({ products: [] }) } },
+    budget: { reserve: async () => ++reservations <= 4 ? `slot-${reservations}` : null, record: async () => {} },
+    fetcher: async () => {
+      requests += 1;
+      if (requests < 3) return new Response(JSON.stringify({ choices: [{ message: { role: "assistant", content: null, tool_calls: [{ id: `call_${requests}`, type: "function", function: { name: "searchProducts", arguments: "{}" } }] } }] }));
+      if (requests === 3) return new Response(JSON.stringify({ choices: [{ message: { role: "assistant", content: "no-json" } }] }));
+      return new Response(JSON.stringify({ choices: [{ message: { role: "assistant", content: '{"reply":"Puedo ayudarte a crear una pieza personalizada."}' } }] }));
+    },
+  });
+  assert.equal(result.value.reply, "Puedo ayudarte a crear una pieza personalizada.");
+  assert.equal(requests, 4);
+  assert.equal(reservations, 4);
+});
+
 test("salida de herramientas fuera del esquema se revalida sin herramientas", async () => {
   let calls = 0;
   const result = await gatewayJson({
