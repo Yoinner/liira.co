@@ -2,12 +2,13 @@ import type { Metadata } from "next";
 import Image from "next/image";
 import Link from "next/link";
 import { ArrowRight } from "lucide-react";
+import { SignatureTransition } from "@/components/public/signature-transition";
 
 export const metadata: Metadata = { title: "Nosotros", description: "Conoce la historia de Liira, accesorios hechos a mano desde Bucaramanga desde junio de 2026." };
 
 export default function AboutPage() {
   return (
-    <div className="about-page about-story-page">
+    <SignatureTransition><div className="about-page about-story-page">
       <section className="about-opening">
         <div className="about-opening-copy">
           <p className="eyebrow">Nuestra historia · Bucaramanga</p>
@@ -35,6 +36,6 @@ export default function AboutPage() {
       </section>
 
       <section className="place-section"><div className="container"><p className="eyebrow">Bucaramanga · Colombia</p><h2>Hecha cerca.<br />Pensada para llegar lejos.</h2><p>Atendemos cada pedido de forma directa y enviamos a todo el país. Antes de confirmar, te contamos disponibilidad, tiempo y valor de envío.</p><Link href="/personaliza" className="button light">Crear una pieza <ArrowRight size={17} /></Link></div></section>
-    </div>
+    </div></SignatureTransition>
   );
 }

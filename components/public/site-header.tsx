@@ -11,7 +11,7 @@ export function SiteHeader() {
         </Link>
         <nav className="desktop-nav" aria-label="Navegación principal">
           {navigation.map((item) => (
-            <Link href={item.href} key={item.href}>{item.label}</Link>
+            <Link href={item.href} key={item.href} transitionTypes={["liira-signature"]}>{item.label}</Link>
           ))}
         </nav>
         <a className="header-cta" href={whatsappUrl("Hola Liira, quiero conocer sus piezas disponibles.")} target="_blank" rel="noreferrer">
@@ -21,7 +21,7 @@ export function SiteHeader() {
           <summary aria-label="Abrir menú"><Menu size={21} /></summary>
           <nav aria-label="Navegación móvil">
             {navigation.map((item) => (
-              <Link href={item.href} key={item.href}>{item.label}</Link>
+              <Link href={item.href} key={item.href} transitionTypes={["liira-signature"]}>{item.label}</Link>
             ))}
             <a href={whatsappUrl("Hola Liira, quiero conocer sus piezas disponibles.")} target="_blank" rel="noreferrer">Hacer un pedido</a>
           </nav>

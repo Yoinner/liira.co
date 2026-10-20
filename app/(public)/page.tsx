@@ -4,6 +4,7 @@ import { ArrowDownRight, ArrowRight, Gem, Heart, MapPin, PackageCheck, Sparkles 
 import { MuranoThreadStage } from "@/components/public/murano-thread-stage";
 import { CategoryCarousel } from "@/components/public/category-carousel";
 import { ProductCard } from "@/components/public/product-card";
+import { SignatureTransition } from "@/components/public/signature-transition";
 import { getCatalog } from "@/lib/data/catalog";
 
 const categoryFallbacks: Record<string, { src: string; copy: string }> = {
@@ -34,11 +35,11 @@ export default async function HomePage() {
   });
 
   return (
-    <>
+    <SignatureTransition>
       <section className="hero thread-hero">
         <div className="hero-copy">
           <p className="eyebrow"><span /> Accesorios en murano · Bucaramanga</p>
-          <h1><span>Tu color.</span><span>Tu intención.</span><em>Tu Liira.</em></h1>
+          <h1 className="hero-title" aria-label="Piezas que cuentan tu historia."><span aria-hidden="true">Piezas que</span><span className="hero-word-cycle" aria-hidden="true"><span>guardan</span><span>acompañan</span><span>celebran</span><span>cuentan</span></span><em aria-hidden="true">tu historia.</em></h1>
           <p className="hero-lead">Cordones, denarios y rosarios de mano compuestos cuenta por cuenta. Explora una pieza disponible o empieza una combinación creada contigo.</p>
           <div className="hero-actions">
             <Link href="/personaliza" className="button thread-primary">Crear mi combinación <ArrowRight size={17} /></Link>
@@ -109,6 +110,6 @@ export default async function HomePage() {
         <div><p className="eyebrow">Tu próxima pieza empieza aquí</p><h2>¿Qué quieres llevar contigo?</h2></div>
         <div><p>Explora lo disponible o cuéntanos la combinación que imaginas. Te respondemos por WhatsApp para confirmar cada detalle.</p><div className="final-actions"><Link href="/catalogo" className="button primary">Ver colección</Link><Link href="/personaliza" className="text-link">Quiero personalizar <ArrowRight size={17} /></Link></div></div>
       </section>
-    </>
+    </SignatureTransition>
   );
 }

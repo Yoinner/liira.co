@@ -6,6 +6,7 @@ export const inquiryPriorities = ["baja", "normal", "alta"] as const;
 export function normalizePhone(value: string) {
   const digits = value.replace(/\D/g, "");
   if (!digits) return "";
+  if (value.trim().startsWith("+")) return digits;
   if (digits.length === 10 && digits.startsWith("3")) return `57${digits}`;
   if (digits.length === 12 && digits.startsWith("57")) return digits;
   return digits;
@@ -16,6 +17,8 @@ export function parseTags(value: string) {
 }
 
 export const inquiryPayloadSchema = z.object({
+  kind: z.enum(["standard", "restock"]).optional().default("standard"),
+  requestKey: z.string().uuid(),
   productId: z.string().uuid().nullable().optional(),
   productName: z.string().trim().min(1).max(160),
   customerName: z.string().trim().min(2).max(80),
@@ -23,6 +26,8 @@ export const inquiryPayloadSchema = z.object({
   colorPreference: z.string().trim().max(80).optional().default(""),
   customization: z.string().trim().min(4).max(600),
   marketingConsent: z.boolean().optional().default(false),
+  restockConsent: z.boolean().optional().default(false),
+  turnstileToken: z.string().min(1).max(2048),
   website: z.string().max(0).optional().default(""),
 });
 

@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Image from "next/image";
 import { InquiryComposer } from "@/components/public/inquiry-composer";
+import { SignatureTransition } from "@/components/public/signature-transition";
 
 export const metadata: Metadata = {
   title: "Personaliza tu pieza",
@@ -9,7 +10,7 @@ export const metadata: Metadata = {
 
 export default function PersonalizePage() {
   return (
-    <div className="personalize-page page-space">
+    <SignatureTransition><div className="personalize-page page-space">
       <section className="personalize-grid container">
         <div className="personalize-copy">
           <p className="eyebrow">Atelier Liira</p>
@@ -25,6 +26,6 @@ export default function PersonalizePage() {
           <InquiryComposer />
         </div>
       </section>
-    </div>
+    </div></SignatureTransition>
   );
 }

@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { ArrowRight, SlidersHorizontal } from "lucide-react";
 import { ProductCard } from "@/components/public/product-card";
+import { SignatureTransition } from "@/components/public/signature-transition";
 import { getCatalog } from "@/lib/data/catalog";
 
 export const metadata: Metadata = {
@@ -15,7 +16,7 @@ export default async function CatalogPage({ searchParams }: { searchParams: Prom
   const visible = params.categoria ? products.filter((product) => product.category?.slug === params.categoria) : products;
 
   return (
-    <div className="catalog-page container page-space">
+    <SignatureTransition><div className="catalog-page container page-space">
       <header className="page-hero catalog-hero">
         <div><p className="eyebrow">Colección Liira</p><h1>Piezas para llevar<br />{" "}<em>tu esencia.</em></h1></div>
         <p>Hechas a mano con murano y detalles elegidos para convertir color, fe y estilo en algo que se siente propio.</p>
@@ -37,6 +38,6 @@ export default async function CatalogPage({ searchParams }: { searchParams: Prom
           <Link href="/personaliza" className="button primary">Crear una pieza personalizada <ArrowRight size={17} /></Link>
         </div>
       )}
-    </div>
+    </div></SignatureTransition>
   );
 }

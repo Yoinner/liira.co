@@ -10,3 +10,7 @@ test("adds Colombia's prefix to a local mobile number", () => {
 test("keeps an already normalized Colombian mobile number", () => {
   assert.equal(normalizePhone("+57 321 505 6443"), "573215056443");
 });
+
+test("preserves explicit international prefixes instead of assuming Colombia", () => {
+  assert.equal(normalizePhone("+32 15 05 64 43"), "3215056443");
+});

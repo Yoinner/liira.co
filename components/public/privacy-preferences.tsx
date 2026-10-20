@@ -38,13 +38,13 @@ export function PrivacyPreferences() {
   useEffect(() => {
     if (!open || !dialog.current) return;
     const previous = document.activeElement as HTMLElement | null;
-    dialog.current.querySelector<HTMLButtonElement>("button")?.focus();
+    dialog.current.focus({ preventScroll: true });
     function containFocus(event: KeyboardEvent) {
       if (event.key === "Escape") { setReopening(false); setDismissed(true); return; }
       if (event.key !== "Tab" || !dialog.current) return;
       const elements = [...dialog.current.querySelectorAll<HTMLElement>('button:not(:disabled),a[href],input:not(:disabled)')];
       if (!elements.length) return;
-      if (event.shiftKey && document.activeElement === elements[0]) { event.preventDefault(); elements.at(-1)?.focus(); }
+      if (event.shiftKey && (document.activeElement === elements[0] || document.activeElement === dialog.current)) { event.preventDefault(); elements.at(-1)?.focus(); }
       else if (!event.shiftKey && document.activeElement === elements.at(-1)) { event.preventDefault(); elements[0].focus(); }
     }
     document.addEventListener("keydown", containFocus);
@@ -74,7 +74,7 @@ export function PrivacyPreferences() {
   if (!ready) return null;
   return <>
     <button className="privacy-reopen" type="button" onClick={() => { setOptions({ analytics: choice?.analytics || false, personalization: choice?.personalization || false, marketing: choice?.marketing || false }); setDismissed(false); setReopening(true); setConfiguring(true); }} aria-label="Cambiar preferencias de privacidad">Privacidad</button>
-    {open && <div className="privacy-backdrop"><section ref={dialog} className="privacy-dialog" role="dialog" aria-modal="true" aria-labelledby="privacy-title">
+    {open && <div className="privacy-backdrop"><section ref={dialog} tabIndex={-1} className="privacy-dialog" role="dialog" aria-modal="true" aria-labelledby="privacy-title">
       <p className="eyebrow">Tu decisión, a tu ritmo</p><h2 id="privacy-title">Una experiencia hecha <em>con respeto.</em></h2>
       <p>Usamos lo necesario para que Liira funcione. La medición anónima, la personalización y el marketing son opcionales. Aceptar cookies <strong>no autoriza mensajes de WhatsApp</strong> ni revela tu número.</p>
       {configuring && <div className="privacy-options">
