@@ -156,6 +156,16 @@ html:has(.admin-shell), html:has(.admin-shell) body { height: 100%; overflow: hi
 .customer-context > div { display: flex; justify-content: space-between; gap: 12px; padding-block: 9px; border-top: 1px solid var(--admin-line); font-size: .75rem; }
 .customer-context > div span { color: var(--admin-muted); }
 .customer-context > a { display: inline-block; margin-top: 14px; color: var(--admin-wine); font-size: .78rem; font-weight: 700; }
+.recovery-review { display: grid; grid-template-columns: minmax(0,1fr) minmax(280px,.75fr); gap: 22px; margin: 18px 0 24px; padding: 23px; }
+.recovery-review h2 { margin: 0 0 7px; color: var(--admin-deep); font: 600 1.65rem/1.1 var(--display); }
+.recovery-review p:not(.admin-kicker) { margin: 0; color: var(--admin-muted); font-size: .78rem; line-height: 1.55; }
+.recovery-review ul { margin: 0; padding: 0; list-style: none; }
+.recovery-review li { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 0; border-bottom: 1px solid var(--admin-line); }
+.recovery-review li span { display: grid; min-width: 0; }
+.recovery-review li strong { font-size: .78rem; }
+.recovery-review li small { overflow: hidden; color: var(--admin-muted); text-overflow: ellipsis; white-space: nowrap; }
+.recovery-review li a { display: inline-flex; align-items: center; gap: 4px; flex: none; color: var(--admin-wine); font-size: .75rem; font-weight: 750; }
+@media (max-width: 1000px) { .recovery-review { grid-template-columns: 1fr; } }
 .operator-history { padding: 0 18px 15px; }
 .operator-history summary { padding-block: 17px; cursor: pointer; font-size: .83rem; font-weight: 800; }
 .operator-history summary span { padding: 3px 8px; border-radius: 99px; background: var(--admin-soft); }

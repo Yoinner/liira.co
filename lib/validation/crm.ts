@@ -22,6 +22,7 @@ export const inquiryPayloadSchema = z.object({
   customerPhone: z.string().trim().min(7).max(30).transform(normalizePhone).refine((phone) => /^\d{10,15}$/.test(phone), "Número inválido"),
   colorPreference: z.string().trim().max(80).optional().default(""),
   customization: z.string().trim().min(4).max(600),
+  marketingConsent: z.boolean().optional().default(false),
   website: z.string().max(0).optional().default(""),
 });
 

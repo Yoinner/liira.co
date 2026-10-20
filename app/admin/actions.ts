@@ -262,6 +262,9 @@ export async function updateCustomer(formData: FormData) {
   });
   if (!parsed.success) throw new Error("Revisa los datos del cliente");
   const value = parsed.data;
+  const currentConsent = await client.from("customers").select("marketing_consent").eq("id", value.id).single();
+  if (currentConsent.error || !currentConsent.data) throw new Error("No se pudo verificar el consentimiento");
+  if (value.marketingConsent && !currentConsent.data.marketing_consent) throw new Error("El permiso comercial debe otorgarlo la persona desde un formulario explícito");
   const { error } = await client.from("customers").update({
     name: value.name, phone: value.phone, normalized_phone: value.phone ? normalizePhone(value.phone) : null,
     email: value.email, instagram_handle: value.instagramHandle, city: value.city, preferences: value.preferences,
@@ -269,7 +272,8 @@ export async function updateCustomer(formData: FormData) {
     updated_at: new Date().toISOString(),
   }).eq("id", value.id);
   if (error) throw new Error("No se pudo actualizar el cliente");
-  await writeAudit(client, "customer_updated", "customer", value.id, session.role, { tags: value.tags });
+  if (currentConsent.data.marketing_consent && !value.marketingConsent) await client.from("customer_activities").insert({ customer_id: value.id, activity_type: "marketing_consent_revoked", summary: "Permiso comercial retirado en el panel.", actor_role: session.role, metadata: { source: "admin_customer_profile" } });
+  await writeAudit(client, "customer_updated", "customer", value.id, session.role, { tags: value.tags, marketing_consent: value.marketingConsent, marketing_consent_revoked: currentConsent.data.marketing_consent && !value.marketingConsent });
   revalidatePath(`/admin/clientes/${value.id}`);
   revalidatePath("/admin/clientes");
 }

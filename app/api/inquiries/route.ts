@@ -2,6 +2,7 @@ import { createHmac } from "node:crypto";
 import { NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
 import { inquiryPayloadSchema } from "@/lib/validation/crm";
+import { marketingConsentText, privacyVersion } from "@/lib/privacy";
 
 function hashIp(ip: string) {
   const secret = process.env.AUTH_SECRET || "liira-development-rate-limit";
@@ -9,6 +10,7 @@ function hashIp(ip: string) {
 }
 
 export async function POST(request: Request) {
+  if (request.headers.get("origin") !== new URL(request.url).origin) return NextResponse.json({ error: "Origen no permitido." }, { status: 403 });
   const ip = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
 
   let body: unknown;
@@ -42,6 +44,13 @@ export async function POST(request: Request) {
   }, { onConflict: "normalized_phone", ignoreDuplicates: false }).select("id").single();
 
   if (customerError || !customer) return NextResponse.json({ error: "No se pudo registrar el contacto." }, { status: 503 });
+
+  if (payload.marketingConsent) {
+    const consent = await client.from("customer_activities").insert({ customer_id: customer.id, activity_type: "marketing_consent_granted", summary: "Autorizó mensajes comerciales de Liira desde el formulario web.", metadata: { purpose: "whatsapp_marketing", source: "web_inquiry", notice_version: privacyVersion, notice_text: marketingConsentText } });
+    if (consent.error) return NextResponse.json({ error: "No se pudo registrar el consentimiento." }, { status: 503 });
+    const grant = await client.from("customers").update({ marketing_consent: true }).eq("id", customer.id);
+    if (grant.error) return NextResponse.json({ error: "No se pudo guardar el consentimiento." }, { status: 503 });
+  }
 
   const { data: inquiry, error } = await client.from("inquiries").insert({
     product_id: payload.productId || null,

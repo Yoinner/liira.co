@@ -131,7 +131,7 @@ export type WhatsAppConversation = {
   agent_stage: string;
   agent_follow_up_at: string | null;
   deleted_at: string | null;
-  customer?: Pick<Customer, "id" | "name" | "phone"> | null;
+  customer?: Pick<Customer, "id" | "name" | "phone"> & Partial<Pick<Customer, "city" | "preferences" | "marketing_consent">> | null;
 };
 
 export type WhatsAppMessage = {

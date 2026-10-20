@@ -81,14 +81,21 @@ export const getWhatsAppInbox = cache(async () => {
   const client = getSupabaseAdmin();
   if (!client) return { conversations: [] as WhatsAppConversation[], available: false };
   const result = await client.from("whatsapp_conversations").select("*, customer:customers(id,name,phone)").is("deleted_at", null).order("last_message_at", { ascending: false }).limit(200);
-  return { conversations: (result.data || []) as WhatsAppConversation[], available: !result.error };
+  const conversations = (result.data || []) as WhatsAppConversation[];
+  if (result.error || !conversations.length) return { conversations, available: !result.error };
+  const recent = await client.from("whatsapp_messages").select("conversation_id,body,media_caption,message_type,created_at").in("conversation_id", conversations.map((item) => item.id)).is("deleted_at", null).order("created_at", { ascending: false }).limit(500);
+  const previews = new Map<string, string>();
+  for (const message of recent.data || []) {
+    if (!previews.has(message.conversation_id)) previews.set(message.conversation_id, message.body || message.media_caption || (message.message_type === "image" ? "Imagen" : message.message_type === "video" ? "Video" : "Mensaje recibido"));
+  }
+  return { conversations: conversations.map((item) => ({ ...item, lastMessagePreview: previews.get(item.id) || null })), available: true };
 });
 
 export const getWhatsAppConversation = cache(async (id: string) => {
   const client = getSupabaseAdmin();
   if (!client) return null;
   const [conversation, messages, handoffs, templateSends, orders, quotes] = await Promise.all([
-    client.from("whatsapp_conversations").select("*, customer:customers(id,name,phone)").eq("id", id).is("deleted_at", null).maybeSingle(),
+    client.from("whatsapp_conversations").select("*, customer:customers(id,name,phone,city,preferences,marketing_consent)").eq("id", id).is("deleted_at", null).maybeSingle(),
     client.from("whatsapp_messages").select("*").eq("conversation_id", id).order("created_at", { ascending: false }).limit(300),
     client.from("amanda_handoffs").select("*").eq("conversation_id", id).order("created_at", { ascending: false }).limit(30),
     client.from("whatsapp_template_sends").select("status,template_name,topic,created_at").eq("conversation_id", id).in("status", ["pending", "accepted"]).gte("created_at", new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()).order("created_at", { ascending: false }).limit(1),
@@ -96,6 +103,10 @@ export const getWhatsAppConversation = cache(async (id: string) => {
     client.from("amanda_shipping_quotes").select("id,handoff_id,order_id,destination,item_summary,amount_cop,delivery_estimate,conditions,source_last_inbound_at,issued_at,expires_at").eq("conversation_id", id).order("issued_at", { ascending: false }).limit(20),
   ]);
   if (conversation.error || !conversation.data || messages.error) return null;
-  const knowledge = handoffs.data?.length ? await client.from("amanda_knowledge").select("id,source_handoff_id,content,status").in("source_handoff_id", handoffs.data.map((item) => item.id)) : null;
-  return { conversation: conversation.data as WhatsAppConversation, messages: [...(messages.data || [])].reverse() as WhatsAppMessage[], handoffs: (handoffs.data || []) as AmandaHandoff[], knowledge: knowledge?.data || [], latestTemplateSend: templateSends.data?.[0] || null, orders: orders.data || [], paymentsReady: !orders.error, quotes: quotes.data || [], quotesReady: !quotes.error };
+  const [knowledge, interests, activities] = await Promise.all([
+    handoffs.data?.length ? client.from("amanda_knowledge").select("id,source_handoff_id,content,status").in("source_handoff_id", handoffs.data.map((item) => item.id)) : Promise.resolve(null),
+    client.from("inquiries").select("id,product_name,pipeline_stage,created_at").eq("customer_id", conversation.data.customer_id).order("created_at", { ascending: false }).limit(6),
+    client.from("customer_activities").select("id,activity_type,summary,created_at").eq("customer_id", conversation.data.customer_id).order("created_at", { ascending: false }).limit(6),
+  ]);
+  return { conversation: conversation.data as WhatsAppConversation, messages: [...(messages.data || [])].reverse() as WhatsAppMessage[], handoffs: (handoffs.data || []) as AmandaHandoff[], knowledge: knowledge?.data || [], interests: interests.data || [], activities: activities.data || [], latestTemplateSend: templateSends.data?.[0] || null, orders: orders.data || [], paymentsReady: !orders.error, quotes: quotes.data || [], quotesReady: !quotes.error };
 });

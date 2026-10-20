@@ -17,7 +17,7 @@ export function ProductCard({ product }: { product: Product }) {
         )}
         {product.stock === 0 && <span className="stock-badge sold-out">Agotado</span>}
         {lowStock && <span className="stock-badge">Últimas {product.stock}</span>}
-        <span className="product-view">Ver pieza <ArrowUpRight size={15} /></span>
+        <span className="product-view">{product.stock === 0 ? "Consultar alternativas" : "Ver pieza"} <ArrowUpRight size={15} /></span>
       </Link>
       <div className="product-card-body">
         <div>

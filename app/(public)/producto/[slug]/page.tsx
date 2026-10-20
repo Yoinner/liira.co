@@ -4,7 +4,7 @@ import Link from "next/link";
 import { ArrowLeft, Check, Package, Sparkles } from "lucide-react";
 import { notFound } from "next/navigation";
 import { InquiryComposer } from "@/components/public/inquiry-composer";
-import { formatCop } from "@/lib/config";
+import { formatCop, siteConfig } from "@/lib/config";
 import { getProductBySlug } from "@/lib/data/catalog";
 
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
@@ -36,7 +36,7 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
           <div className={`availability ${product.stock === 0 ? "unavailable" : ""}`}>
             {product.stock === 0 ? "Agotado por ahora" : lowStock ? `Solo quedan ${product.stock}` : "Disponible para pedir"}
           </div>
-          {product.stock > 0 ? <InquiryComposer productId={product.id} productName={product.name} compact /> : <Link href="/personaliza" className="button primary wide">Pedir una versión personalizada</Link>}
+          {product.stock > 0 ? <InquiryComposer productId={product.id} productName={product.name} compact /> : <a href={`https://wa.me/${siteConfig.whatsapp}?text=${encodeURIComponent(`Hola, vi ${product.name} en Liira. Está agotado; ¿podrían ayudarme con una alternativa o una pieza personalizada?`)}`} target="_blank" rel="noopener noreferrer" className="button primary wide">Consultar alternativa por WhatsApp</a>}
           <div className="detail-assurances">
             <div><Sparkles size={19} /><span><strong>Hecha a mano</strong><small>En Bucaramanga</small></span></div>
             <div><Package size={19} /><span><strong>Envíos nacionales</strong><small>Valor y tiempo por confirmar</small></span></div>

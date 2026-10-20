@@ -4,6 +4,7 @@ import "./globals.css";
 import "./liira-public.css";
 import "./liira-admin.css";
 import "./liira-admin-premium.css";
+import "./liira-whatsapp-experience.css";
 import { siteConfig } from "@/lib/config";
 
 const display = Cormorant_Garamond({

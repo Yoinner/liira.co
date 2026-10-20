@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { MessageCircle, Send } from "lucide-react";
 import { siteConfig } from "@/lib/config";
+import { marketingConsentText } from "@/lib/privacy";
 
 type Props = {
   productId?: string;
@@ -25,6 +26,7 @@ export function InquiryComposer({ productId, productName = "Pieza personalizada"
       colorPreference: String(formData.get("color") || "").trim(),
       customization: String(formData.get("details") || "").trim(),
       website: String(formData.get("website") || ""),
+      marketingConsent: formData.get("marketingConsent") === "on",
     };
 
     const message = [
@@ -65,6 +67,7 @@ export function InquiryComposer({ productId, productName = "Pieza personalizada"
       </div>
       <label>Color que imaginas <input name="color" placeholder="Ej. vino, marfil, verde esmeralda…" maxLength={80} /></label>
       <label>Cuéntanos cómo la quieres <textarea name="details" rows={compact ? 3 : 4} placeholder="Tipo de pieza, ocasión, dijes o combinación de colores" minLength={4} maxLength={600} required /></label>
+      <label className="inquiry-opt-in"><input type="checkbox" name="marketingConsent"/><span>{marketingConsentText}</span></label>
       <button className="button primary wide" disabled={pending} type="submit">
         {pending ? "Preparando mensaje…" : <><MessageCircle size={18} /> Continuar en WhatsApp <Send size={15} /></>}
       </button>
