@@ -5,3 +5,7 @@ export function safeGeneralRule(value: string) {
   if (/\$\s*\d|\b\d{4,}\b|\b\d[\d.,]*\s*(?:COP|pesos|mil)\b|\b\d+\s*(?:d[ií]as?|horas?|semanas?)\b/i.test(rule)) return null;
   return rule;
 }
+
+export function canPromoteHandoffKind(kind: string) {
+  return kind === "general";
+}

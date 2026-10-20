@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { allowedAgentStage, conversationTranscript, handoffNamedInMessage, operatorCaseCode, operatorCaseReference } from "../lib/agent-core/conversation.ts";
 import { supportedCatalogReply, supportedOperatorReply } from "../lib/whatsapp/amanda-business.ts";
-import { safeGeneralRule } from "../lib/agent-core/knowledge.ts";
+import { canPromoteHandoffKind, safeGeneralRule } from "../lib/agent-core/knowledge.ts";
 
 test("el núcleo conserva fragmentos y leyendas multimedia en orden", () => {
   assert.equal(conversationTranscript([
@@ -20,6 +20,9 @@ test("una regla general requiere aprobación sin contacto privado ni enlace", ()
   assert.equal(safeGeneralRule("El envío a Cali cuesta 25.000 COP aproximadamente."), null);
   assert.equal(safeGeneralRule("El envío a Cali cuesta 25000 aproximadamente."), null);
   assert.equal(safeGeneralRule("El envío a Cali demora 3 días."), null);
+  assert.equal(canPromoteHandoffKind("general"), true);
+  assert.equal(canPromoteHandoffKind("shipping_quote"), false);
+  assert.equal(canPromoteHandoffKind("payment_link"), false);
 });
 
 test("el validador no deja cotizar montos ni enlaces ajenos al catálogo", () => {

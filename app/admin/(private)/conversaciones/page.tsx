@@ -11,13 +11,13 @@ export default async function ConversationsPage() {
   await requireAdmin("business");
   const { conversations, available } = await getWhatsAppInbox();
   return <main className="admin-content whatsapp-inbox-page">
-    <div className="admin-title whatsapp-title"><div><p className="admin-kicker">WhatsApp Business conectado</p><h1>Conversaciones vivas.</h1><p className="admin-lead">Mensajes recibidos, prioridad comercial y siguiente acción en una sola bandeja.</p></div><LiveConversationRefresh /></div>
+    <div className="admin-title whatsapp-title"><div><p className="admin-kicker">WhatsApp Business · Liira</p><h1>Conversaciones vivas.</h1><p className="admin-lead">Mensajes recibidos, prioridad comercial y siguiente acción en una sola bandeja.</p></div><LiveConversationRefresh available={available} /></div>
     {!available && <div className="admin-unavailable">La bandeja quedará disponible al aplicar la migración de WhatsApp.</div>}
     <form action={openWhatsAppConversation} className="admin-panel whatsapp-new-conversation">
       <div><span><PhoneCall /></span><div><strong>Nueva conversación</strong><p>Ingresa un celular colombiano. Lo validamos y abrimos su ficha dentro de la bandeja.</p></div></div>
-      <label><span>Número de WhatsApp</span><input name="phone" type="tel" inputMode="tel" autoComplete="tel" placeholder="300 123 4567" minLength={10} maxLength={30} required /></label>
-      <label><span>Nombre, si lo conoces</span><input name="name" type="text" autoComplete="name" placeholder="Nombre del cliente" maxLength={100} /></label>
-      <button type="submit">Verificar y abrir</button>
+      <label><span>Número de WhatsApp</span><input name="phone" type="tel" inputMode="tel" autoComplete="tel" placeholder="300 123 4567" minLength={10} maxLength={30} required disabled={!available} /></label>
+      <label><span>Nombre, si lo conoces</span><input name="name" type="text" autoComplete="name" placeholder="Nombre del cliente" maxLength={100} disabled={!available} /></label>
+      <button type="submit" disabled={!available}>Verificar y abrir</button>
       <small>Si el cliente aún no ha escrito, Meta solo permite iniciar el contacto con una plantilla aprobada. El panel te avisará antes de enviar.</small>
     </form>
     <section className="whatsapp-queue">{conversations.length ? conversations.map((item) => <Link className="admin-panel whatsapp-thread-card" href={`/admin/conversaciones/${item.id}`} key={item.id}>
