@@ -32,7 +32,6 @@ export function PrivacyPreferences() {
   const [dismissed, setDismissed] = useState(false);
   const open = ready && ((!choice && !dismissed) || reopening);
   const dialog = useRef<HTMLElement>(null);
-  const [configuring, setConfiguring] = useState(false);
   const [options, setOptions] = useState({ analytics: false, personalization: false, marketing: false });
 
   useEffect(() => {
@@ -68,22 +67,21 @@ export function PrivacyPreferences() {
     window.dispatchEvent(new Event("liira:privacy"));
     setOptions(next);
     setReopening(false);
-    setConfiguring(false);
   }
 
   if (!ready) return null;
   return <>
-    <button className="privacy-reopen" type="button" onClick={() => { setOptions({ analytics: choice?.analytics || false, personalization: choice?.personalization || false, marketing: choice?.marketing || false }); setDismissed(false); setReopening(true); setConfiguring(true); }} aria-label="Cambiar preferencias de privacidad">Privacidad</button>
+    <button className="privacy-reopen" type="button" onClick={() => { setOptions({ analytics: choice?.analytics || false, personalization: choice?.personalization || false, marketing: choice?.marketing || false }); setDismissed(false); setReopening(true); }} aria-label="Cambiar preferencias de privacidad">Privacidad</button>
     {open && <div className="privacy-backdrop"><section ref={dialog} tabIndex={-1} className="privacy-dialog" role="dialog" aria-modal="true" aria-labelledby="privacy-title">
       <p className="eyebrow">Tu decisión, a tu ritmo</p><h2 id="privacy-title">Una experiencia hecha <em>con respeto.</em></h2>
-      <p>Usamos lo necesario para que Liira funcione. La medición anónima, la personalización y el marketing son opcionales. Aceptar cookies <strong>no autoriza mensajes de WhatsApp</strong> ni revela tu número.</p>
-      {configuring && <div className="privacy-options">
+      <p>Usamos lo necesario para que Liira funcione. Las demás opciones están desactivadas: si quieres activarlas, márcalas antes de continuar. Podrás cambiarlas después en «Privacidad». Esta elección <strong>no autoriza mensajes de WhatsApp</strong> ni revela tu número.</p>
+      <div className="privacy-options">
         <label><span><strong>Necesarias</strong><small>Seguridad y preferencias básicas.</small></span><input type="checkbox" checked disabled /></label>
         <label><span><strong>Analítica</strong><small>Vistas de productos y categorías con sesión anónima.</small></span><input type="checkbox" checked={options.analytics} onChange={(e) => setOptions({ ...options, analytics: e.target.checked })} /></label>
         <label><span><strong>Personalización</strong><small>Preferencias opcionales en este navegador; sin identificación automática.</small></span><input type="checkbox" checked={options.personalization} onChange={(e) => setOptions({ ...options, personalization: e.target.checked })} /></label>
         <label><span><strong>Marketing</strong><small>Preferencia de cookies; los mensajes requieren un permiso separado y no se envían por esta elección.</small></span><input type="checkbox" checked={options.marketing} onChange={(e) => setOptions({ ...options, marketing: e.target.checked })} /></label>
-      </div>}
-      <div className="privacy-actions"><button type="button" onClick={() => save({ analytics: false, personalization: false, marketing: false })}>Rechazar opcionales</button>{configuring ? <button type="button" onClick={() => save(options)}>Guardar selección</button> : <button type="button" onClick={() => setConfiguring(true)}>Configurar</button>}<button type="button" onClick={() => save({ analytics: true, personalization: true, marketing: true })}>Aceptar opcionales</button></div>
+      </div>
+      <div className="privacy-actions"><button type="button" onClick={() => save(options)}>Aceptar y continuar</button></div>
       <Link href="/politicas/privacidad" onClick={() => { setReopening(false); setDismissed(true); }}>Leer la política de privacidad</Link>{choice && <p className="privacy-saved">Tu última elección fue guardada el {new Intl.DateTimeFormat("es-CO", { dateStyle: "medium", timeZone: "America/Bogota" }).format(new Date(choice.savedAt))}.</p>}
     </section></div>}
   </>;
